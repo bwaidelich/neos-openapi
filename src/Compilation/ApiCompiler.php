@@ -111,12 +111,14 @@ final readonly class ApiCompiler
 
                 $arguments = $this->classify($api, $registered, $method, $operation);
                 $branches = $this->returnBranches($method);
+                foreach ($branches['apiResponses'] as $responseClassName) {
+                    $requiresItemSchema = $requiresItemSchema || is_a($responseClassName, TypedStreamResponse::class, true);
+                }
                 $compiled = $this->compileOperation($api, $registered, $operation, $operationId, $arguments, $branches, $components);
-                $requiresItemSchema = $requiresItemSchema || $compiled['requiresItemSchema'];
                 $existing = $paths->get($operation->path);
                 $paths = $existing === null
-                    ? $paths->with($operation->path, PathObject::create()->withOperation($operation->method, $compiled['operation']))
-                    : $paths->replace($operation->path, $existing->withOperation($operation->method, $compiled['operation']));
+                    ? $paths->with($operation->path, PathObject::create()->withOperation($operation->method, $compiled))
+                    : $paths->replace($operation->path, $existing->withOperation($operation->method, $compiled));
 
                 $dispatchTable = $dispatchTable->with($operation->path, $operation->method, new DispatchEntry(
                     $registered->className,
@@ -152,7 +154,6 @@ final readonly class ApiCompiler
     /**
      * @param list<ClassifiedArgument> $arguments
      * @param array{apiResponses: list<class-string<ApiResponse>>, success: TypeReference|null, empty: bool} $branches
-     * @return array{operation: OperationObject, requiresItemSchema: bool}
      */
     private function compileOperation(
         ApiDefinition $api,
@@ -162,7 +163,7 @@ final readonly class ApiCompiler
         array $arguments,
         array $branches,
         SchemaComponents $components,
-    ): array {
+    ): OperationObject {
         $parameters = [];
         $requestBody = null;
         foreach ($arguments as $classified) {
@@ -191,8 +192,7 @@ final readonly class ApiCompiler
             );
         }
 
-        $compiledResponses = $this->compileResponses($branches, $components);
-        $responses = $compiledResponses['responses'];
+        $responses = $this->compileResponses($branches, $components);
         if (($parameters !== [] || $requestBody !== null) && !$responses->hasResponseForStatusCode(HttpStatusCode::fromInteger(400))) {
             $responses = $responses->with(HttpStatusCode::fromInteger(400), new ResponseObject(
                 description: 'The request could not be understood',
@@ -210,20 +210,17 @@ final readonly class ApiCompiler
             ));
         }
 
-        return [
-            'operation' => new OperationObject(
-                tags: [$registered->tag],
-                summary: $operation->summary,
-                description: $operation->description,
-                operationId: $operationId,
-                parameters: $parameters === [] ? null : new ParameterOrReferenceObjects(...$parameters),
-                requestBody: $requestBody,
-                responses: $responses->isEmpty() ? null : $responses,
-                deprecated: $operation->deprecated,
-                security: $operation->security,
-            ),
-            'requiresItemSchema' => $compiledResponses['requiresItemSchema'],
-        ];
+        return new OperationObject(
+            tags: [$registered->tag],
+            summary: $operation->summary,
+            description: $operation->description,
+            operationId: $operationId,
+            parameters: $parameters === [] ? null : new ParameterOrReferenceObjects(...$parameters),
+            requestBody: $requestBody,
+            responses: $responses->isEmpty() ? null : $responses,
+            deprecated: $operation->deprecated,
+            security: $operation->security,
+        );
     }
 
     /**
@@ -420,16 +417,12 @@ final readonly class ApiCompiler
 
     /**
      * @param array{apiResponses: list<class-string<ApiResponse>>, success: TypeReference|null, empty: bool} $branches
-     * @return array{responses: ResponsesObject, requiresItemSchema: bool}
      */
-    private function compileResponses(array $branches, SchemaComponents $components): array
+    private function compileResponses(array $branches, SchemaComponents $components): ResponsesObject
     {
         $responses = ResponsesObject::create();
-        $requiresItemSchema = false;
         foreach ($branches['apiResponses'] as $responseClassName) {
-            $compiled = $this->apiResponse($responseClassName, $components);
-            $responses = $responses->with($responseClassName::statusCode(), $compiled['response']);
-            $requiresItemSchema = $requiresItemSchema || $compiled['requiresItemSchema'];
+            $responses = $responses->with($responseClassName::statusCode(), $this->apiResponse($responseClassName, $components));
         }
         if ($branches['success'] !== null) {
             $responses = $responses->with(HttpStatusCode::fromInteger(200), new ResponseObject(
@@ -444,14 +437,13 @@ final readonly class ApiCompiler
         if ($branches['empty'] && !$responses->hasResponseForStatusCode(HttpStatusCode::fromInteger(204))) {
             $responses = $responses->with(HttpStatusCode::fromInteger(204), new ResponseObject(description: 'No Content'));
         }
-        return ['responses' => $responses, 'requiresItemSchema' => $requiresItemSchema];
+        return $responses;
     }
 
     /**
      * @param class-string<ApiResponse> $responseClassName
-     * @return array{response: ResponseObject, requiresItemSchema: bool}
      */
-    private function apiResponse(string $responseClassName, SchemaComponents $components): array
+    private function apiResponse(string $responseClassName, SchemaComponents $components): ResponseObject
     {
         if (is_a($responseClassName, StreamResponse::class, true)) {
             /** @var class-string<StreamResponse> $responseClassName */
@@ -466,44 +458,35 @@ final readonly class ApiCompiler
                 new MediaTypeObject(schema: $this->bindings->for($bodyType)->jsonSchema($components)),
             );
         }
-        return [
-            'response' => new ResponseObject(
-                description: $responseClassName::description(),
-                // headers are not tied to a body: a bodyless 204 may still carry a Location
-                headers: $this->responseHeaders($responseClassName, $components),
-                content: $content,
-            ),
-            'requiresItemSchema' => false,
-        ];
+        return new ResponseObject(
+            description: $responseClassName::description(),
+            // headers are not tied to a body: a bodyless 204 may still carry a Location
+            headers: $this->responseHeaders($responseClassName, $components),
+            content: $content,
+        );
     }
 
     /**
      * A {@see StreamResponse}'s body is a sequence, not one value — there is no `bodyType()` to build a `schema`
      * from. A {@see TypedStreamResponse} instead describes its items via `itemSchema`, shaped as the OpenAPI
      * registry's own SSE examples are: `data`, `event`, `id` and `retry` as properties of one object, with `data`
-     * narrowed to the declared item type.
+     * narrowed to the declared item type. Whether a document needs `itemSchema` at all — and so has to advertise
+     * OpenAPI 3.2 rather than 3.1.1 — is decided independently, in {@see self::compile()}, by asking the same
+     * question of every response branch it already has in hand; nothing here needs to report it back.
      *
      * @param class-string<StreamResponse> $responseClassName
-     * @return array{response: ResponseObject, requiresItemSchema: bool}
      * @see https://spec.openapis.org/registry/media-type/sse
      */
-    private function streamResponse(string $responseClassName, SchemaComponents $components): array
+    private function streamResponse(string $responseClassName, SchemaComponents $components): ResponseObject
     {
-        if (is_a($responseClassName, TypedStreamResponse::class, true)) {
-            $mediaType = new MediaTypeObject(itemSchema: $this->sseItemSchema($responseClassName::itemType(), $components));
-            $requiresItemSchema = true;
-        } else {
-            $mediaType = new MediaTypeObject();
-            $requiresItemSchema = false;
-        }
-        return [
-            'response' => new ResponseObject(
-                description: $responseClassName::description(),
-                headers: $this->responseHeaders($responseClassName, $components),
-                content: MediaTypeObjectMap::create()->with($responseClassName::contentType(), $mediaType),
-            ),
-            'requiresItemSchema' => $requiresItemSchema,
-        ];
+        $mediaType = is_a($responseClassName, TypedStreamResponse::class, true)
+            ? new MediaTypeObject(itemSchema: $this->sseItemSchema($responseClassName::itemType(), $components))
+            : new MediaTypeObject();
+        return new ResponseObject(
+            description: $responseClassName::description(),
+            headers: $this->responseHeaders($responseClassName, $components),
+            content: MediaTypeObjectMap::create()->with($responseClassName::contentType(), $mediaType),
+        );
     }
 
     private function sseItemSchema(TypeReference $itemType, SchemaComponents $components): JsonSchema
