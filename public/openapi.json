@@ -1,0 +1,250 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Blog",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080"
+    }
+  ],
+  "paths": {
+    "/posts/{slug}": {
+      "get": {
+        "tags": [
+          "Posts"
+        ],
+        "summary": "Fetch one post",
+        "operationId": "getPost",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Post"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be understood",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDocument"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/posts": {
+      "post": {
+        "tags": [
+          "Posts"
+        ],
+        "operationId": "createPost",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Slug"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Slug"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be understood",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDocument"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me": {
+      "get": {
+        "tags": [
+          "Accounts"
+        ],
+        "operationId": "me",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Caller"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The request was not authenticated",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDocument"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          [
+            "bearerAuth",
+            "basicAuth"
+          ]
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Caller": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ]
+      },
+      "Post": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "$ref": "#/components/schemas/Slug"
+          },
+          "author": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "slug",
+          "author",
+          "text"
+        ]
+      },
+      "ProblemDocument": {
+        "type": "object",
+        "title": "ProblemDocument",
+        "description": "An RFC 9457 problem details document",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "A URI identifying the problem type"
+          },
+          "title": {
+            "type": "string",
+            "description": "A short, human-readable summary of the problem type"
+          },
+          "status": {
+            "type": "integer",
+            "description": "The HTTP status code",
+            "minimum": 100,
+            "maximum": 599
+          },
+          "detail": {
+            "type": "string",
+            "description": "A human-readable explanation specific to this occurrence"
+          },
+          "issues": {
+            "type": "array",
+            "description": "Every value that was rejected",
+            "items": {
+              "type": "object",
+              "description": "One rejected value",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "description": "A machine-readable reason"
+                },
+                "message": {
+                  "type": "string",
+                  "description": "A human-readable reason"
+                },
+                "pointer": {
+                  "type": "string",
+                  "description": "An RFC 6901 JSON Pointer to the offending value"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "code",
+                "message",
+                "pointer"
+              ]
+            }
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status"
+        ]
+      },
+      "Slug": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100,
+        "pattern": "^[a-z0-9-]+$"
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      },
+      "basicAuth": {
+        "type": "http",
+        "scheme": "basic"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Posts"
+    },
+    {
+      "name": "Accounts"
+    }
+  ]
+}

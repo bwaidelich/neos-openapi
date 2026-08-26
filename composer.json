@@ -1,0 +1,52 @@
+{
+    "name": "neos/openapi",
+    "description": "Generate OpenAPI 3.1 specifications from attribute-annotated PHP methods, and serve them over PSR-7.",
+    "type": "library",
+    "license": "MIT",
+    "support": {
+        "source": "https://github.com/neos/openapi.git",
+        "forum": "https://discuss.neos.io/",
+        "docs": "https://docs.neos.io/"
+    },
+    "require": {
+        "php": ">=8.4",
+        "neos/jsonschema": "dev-main",
+        "psr/http-message": "^1 || ^2",
+        "psr/http-server-handler": "^1",
+        "psr/http-factory": "^1"
+    },
+    "suggest": {
+        "neos/schematic": "To describe PHP types with attributes and coerce request data into them (Neos\\OpenApi\\Schematic)",
+        "psr/container": "To resolve Api Class instances from a container when serving requests (ContainerApiClassResolver)"
+    },
+    "require-dev": {
+        "roave/security-advisories": "dev-latest",
+        "neos/schematic": "dev-main",
+        "phpstan/phpstan": "^2",
+        "friendsofphp/php-cs-fixer": "^3",
+        "phpunit/phpunit": "^10 || ^11 || ^12",
+        "psr/container": "^1 || ^2",
+        "guzzlehttp/psr7": "^2.7"
+    },
+    "autoload": {
+        "psr-4": {
+            "Neos\\OpenApi\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Neos\\OpenApi\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test:phpstan": "phpstan",
+        "test:cs": "php-cs-fixer check",
+        "test:cs:fix": "php-cs-fixer fix",
+        "test:phpunit": "phpunit",
+        "test": [
+            "@test:phpstan",
+            "@test:cs",
+            "@test:phpunit"
+        ]
+    }
+}

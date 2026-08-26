@@ -1,0 +1,9 @@
+parameters:
+  level: max
+  paths:
+    - src
+    - tests
+  excludePaths:
+    # Deliberately invalid PHP: fixtures for the compiler's own fail-loud checks, which exist precisely because
+    # the code they describe is wrong. Analysing them would report the very mistakes they are here to trigger.
+    - tests/Compilation/Fixtures/Invalid
