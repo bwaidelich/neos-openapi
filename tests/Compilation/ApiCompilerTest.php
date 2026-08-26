@@ -34,8 +34,8 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * The compiler is core, so it is tested against the {@see \Neos\OpenApi\Binding\TypeBindingProvider} port with no schema
- * engine behind it — which is what ADR 0002 promises and the architecture test enforces. `tests/Schematic` covers
- * the same ground with the real adapter.
+ * engine behind it — which is what the architecture test enforces. `tests/Schematic` covers the same ground with
+ * the real adapter.
  */
 final class ApiCompilerTest extends TestCase
 {
@@ -171,7 +171,7 @@ final class ApiCompilerTest extends TestCase
     }
 
     /**
-     * ADR 0006: the predecessor would have made this the request body positionally.
+     * The predecessor would have made this the request body positionally.
      */
     public function testAnUnaccountedArgumentOnAPostFailsLoudly(): void
     {

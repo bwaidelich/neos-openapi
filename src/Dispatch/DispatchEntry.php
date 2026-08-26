@@ -9,8 +9,8 @@ use Neos\OpenApi\Binding\TypeReference;
 /**
  * Everything needed to *serve* one operation: which method of which class to call, and how to fill its arguments.
  *
- * The runtime counterpart of an Operation Object, kept beside the document rather than inside it (ADR 0003) —
- * the predecessor smuggled this through `meta` arrays on the spec objects.
+ * The runtime counterpart of an Operation Object, kept beside the document rather than inside it — the
+ * predecessor smuggled this through `meta` arrays on the spec objects.
  */
 final readonly class DispatchEntry
 {

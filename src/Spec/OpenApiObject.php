@@ -11,8 +11,8 @@ use Neos\OpenApi\Support\SerializesNonNullMembers;
 /**
  * A complete OpenAPI document — the root object, and the thing you publish.
  *
- * `openapi` is not a constructor argument: this package emits {@see SpecVersion::VALUE} and nothing else
- * (ADR 0001). The document is render-only; there is deliberately no way to read one back in (ADR 0004).
+ * `openapi` is not a constructor argument: this package emits {@see SpecVersion::VALUE} and nothing else.
+ * The document is render-only; there is deliberately no way to read one back in.
  *
  * @see https://spec.openapis.org/oas/v3.1.1#openapi-object
  */

@@ -10,7 +10,7 @@ use Attribute;
  * Marks the operation argument the request body is decoded into.
  *
  * Required, deliberately: the predecessor inferred the body positionally, so reordering a method signature
- * silently changed the shape of the published API. See ADR 0006.
+ * silently changed the shape of the published API.
  */
 #[Attribute(Attribute::TARGET_PARAMETER)]
 final class RequestBody

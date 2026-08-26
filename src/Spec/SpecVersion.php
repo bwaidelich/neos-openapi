@@ -10,10 +10,10 @@ namespace Neos\OpenApi\Spec;
  * Deliberately a constant rather than a value object with a range of accepted versions: OpenAPI 3.1.x *is* JSON
  * Schema 2020-12, so the `neos/jsonschema` objects drop straight into a document unchanged, while 3.0.x uses a
  * divergent dialect (`nullable`, boolean `exclusiveMinimum`, no sibling keywords next to `$ref`) that would need a
- * lossy translation layer maintained forever. See [ADR 0001](../docs/adr/0001-openapi-31-only.md).
+ * lossy translation layer maintained forever.
  *
- * The predecessor `wwwision/types-openapi` defaulted to `3.0.3` and let you choose, so a reader coming from it
- * will look for the choice and find none. That is the decision, not an omission.
+ * The predecessor defaulted to `3.0.3` and let you choose, so a reader coming from it will look for the choice
+ * and find none. That is the decision, not an omission.
  */
 final class SpecVersion
 {

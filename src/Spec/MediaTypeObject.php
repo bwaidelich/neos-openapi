@@ -12,7 +12,7 @@ use Neos\OpenApi\Support\SerializesNonNullMembers;
  * The schema (and examples) of a payload for one media type.
  *
  * The `schema` is a `Neos\JsonSchema\Schema` rather than a replica of one: in OpenAPI 3.1 a Schema Object *is* a
- * JSON Schema 2020-12 schema, which is the whole reason this package targets 3.1 (see ADR 0001).
+ * JSON Schema 2020-12 schema, which is the whole reason this package targets 3.1.
  *
  * @see https://spec.openapis.org/oas/v3.1.1#media-type-object
  */

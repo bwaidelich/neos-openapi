@@ -46,7 +46,7 @@ interface ApiResponse
      * The one *instance* member of the interface, and the only one that has to be: everything the generator asks
      * is asked without an instance, but a request handler has one, and it has to get the payload out of it. The
      * value goes out through the same {@see TypeBinding} the schema came from, so a response body cannot drift
-     * away from the schema published for it (ADR 0005).
+     * away from the schema published for it.
      */
     public function body(): mixed;
 }

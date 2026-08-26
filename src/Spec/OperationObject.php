@@ -11,7 +11,7 @@ use Neos\OpenApi\Support\SerializesNonNullMembers;
  * One HTTP operation.
  *
  * Carries no runtime metadata: the method to call and the binding of each argument live in the Dispatch Table, so
- * this object is nothing but the specification (ADR 0003). The predecessor smuggled `methodName`, `parameterName`
+ * this object is nothing but the specification. The predecessor smuggled `methodName`, `parameterName`
  * and a coercion schema through a `meta` array here.
  *
  * @see https://spec.openapis.org/oas/v3.1.1#operation-object

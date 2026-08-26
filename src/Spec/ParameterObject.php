@@ -11,8 +11,7 @@ use Neos\OpenApi\Support\ParameterStyle;
 use Neos\OpenApi\Support\SerializesNonNullMembers;
 
 /**
- * Carries no runtime metadata: which method argument this parameter feeds lives in the Dispatch Table, not here
- * (ADR 0003).
+ * Carries no runtime metadata: which method argument this parameter feeds lives in the Dispatch Table, not here.
  *
  * @see https://spec.openapis.org/oas/v3.1.1#parameter-object
  */

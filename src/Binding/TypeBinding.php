@@ -14,10 +14,10 @@ use Neos\OpenApi\Compilation\SchemaComponents;
  * Deliberately **one** port rather than separate "describe it" and "coerce it" ports: the schema a document
  * advertises and the schema the runtime enforces come from the same object, so they cannot drift apart. That is
  * also why serialization lives here and not on `json_encode` — a response body has to satisfy the schema that was
- * published for it (ADR 0005).
+ * published for it.
  *
  * `Neos\OpenApi\Schematic\SchematicTypeBinding` is the only implementation, and nothing in core may name it
- * (ADR 0002, enforced by `tests/Architecture`).
+ * (enforced by `tests/Architecture`).
  */
 interface TypeBinding
 {

@@ -5,7 +5,7 @@ and serve those methods over PSR-7.
 
 Built on [neos/jsonschema](https://github.com/neos/jsonschema) for the schemas and, optionally,
 [neos/schematic](https://github.com/neos/schematic) for turning PHP types into them and request data back into
-typed arguments. Inspired by [wwwision/types-openapi](https://github.com/bwaidelich/types-openapi).
+typed arguments.
 
 ## Requirements
 
@@ -64,7 +64,7 @@ $compiled = $compiler->compile($api);
 ```
 
 Compiling yields **both halves at once**: the document to publish, and a table to serve from. The spec objects
-carry nothing but the specification — the runtime data lives beside them, not smuggled inside them (ADR 0003):
+carry nothing but the specification — the runtime data lives beside them, not smuggled inside them:
 
 ```php
 // ...
@@ -93,7 +93,7 @@ Nothing is inferred from position. An argument's source is decided by what it ca
 | marked `#[RequestBody]` | the decoded request body |
 | marked `#[Parameter(in: …)]` | that location, under `name:` if it differs from the argument's own |
 | named in the path template | the path |
-| anything else | the query string — except on `POST`/`PUT`/`PATCH`, where it is a compile error (ADR 0006) |
+| anything else | the query string — except on `POST`/`PUT`/`PATCH`, where it is a compile error |
 
 An argument with a default is an optional parameter, and stays optional all the way through: if the request omits
 it, it is left out of the call and the method's own default applies.
@@ -423,7 +423,7 @@ Compilation is the one place reflection happens, and it fails loudly rather than
 | --- | --- |
 | a duplicated `operationId` across any two classes | client generators turn them into method names |
 | two operations claiming one path and method | one of them would be unreachable |
-| a `POST`/`PUT`/`PATCH` argument that is neither `#[Parameter]`, `#[RequestBody]`, nor named in the path | the predecessor inferred the body positionally, so reordering a signature changed the API (ADR 0006) |
+| a `POST`/`PUT`/`PATCH` argument that is neither `#[Parameter]`, `#[RequestBody]`, nor named in the path | the predecessor inferred the body positionally, so reordering a signature changed the API |
 | `#[AuthContext]` on an operation no security requirement covers | there would be no caller to hand over |
 | `#[AuthContext]` that is not nullable where anonymous access is allowed | `null` is what it would be handed |
 | an optional path parameter, or a missing return type | neither can be described |
@@ -481,7 +481,7 @@ assert((string) $response->getBody() === '"hello-world"');
 **No reflection happens on this path.** The document routes the request to a path template, the Dispatch Table
 says which method answers it and where each argument comes from, and the provider — the same one — coerces the
 values and serializes the result. That shared provider is why a response cannot contradict the document that
-advertised it: the schema is the single source of truth for both (ADR 0005), so returned objects are never
+advertised it: the schema is the single source of truth for both, so returned objects are never
 `json_encode`d raw.
 
 Which means every status the handler produces is one the document already described:
@@ -670,7 +670,7 @@ Two classes with the same short name would both want the component name `Address
 than letting whichever was visited first win a name in a public contract.
 
 `neos/schematic` is a **suggested** dependency: `Neos\OpenApi\Schematic\*` is the only namespace that names it,
-and an architecture test enforces that (ADR 0002).
+and an architecture test enforces that.
 
 ## Only 3.1
 
@@ -685,27 +685,25 @@ assert(SpecVersion::JSON_SCHEMA_DIALECT === 'https://json-schema.org/draft/2020-
 
 3.1.x *is* JSON Schema 2020-12, so a `neos/jsonschema` schema drops into a document unchanged. 3.0.x uses a
 divergent dialect that would need a lossy translation layer maintained forever, which would forfeit the main
-reason for building on `neos/jsonschema` at all. See [ADR 0001](docs/adr/0001-openapi-31-only.md).
+reason for building on `neos/jsonschema` at all.
 
 ## Architecture
 
-The design decisions and their trade-offs are recorded as ADRs in [docs/adr](docs/adr):
+The design decisions and their trade-offs:
 
-| ADR | Decision |
-| --- | --- |
-| [0001](docs/adr/0001-openapi-31-only.md) | target OpenAPI 3.1 only |
-| [0002](docs/adr/0002-single-package-schematic-behind-a-port.md) | one package, with `neos/schematic` behind a port |
-| [0003](docs/adr/0003-dispatch-table-instead-of-meta.md) | a pure spec model plus a separate Dispatch Table |
-| [0004](docs/adr/0004-spec-model-is-render-only.md) | the spec model renders, but does not parse |
-| [0005](docs/adr/0005-response-bodies-need-a-schematic-serializer.md) | response bodies are serialized by schema, not `json_encode` |
-| [0006](docs/adr/0006-request-body-is-declared-explicitly.md) | the request body is declared, never inferred |
+- target OpenAPI 3.1 only
+- one package, with `neos/schematic` behind a port
+- a pure spec model plus a separate Dispatch Table
+- the spec model renders, but does not parse
+- response bodies are serialized by schema, not `json_encode`
+- the request body is declared, never inferred
 
 [CONTEXT.md](CONTEXT.md) is the glossary — the vocabulary this codebase holds itself to.
 
 `neos/schematic` is a **suggested** dependency, not a required one: everything in `Neos\OpenApi\*` talks to a
 `TypeBinding` port, and `Neos\OpenApi\Schematic\*` is its only implementation. An architecture test enforces that
 seam, so extracting a separate `neos/schematic-openapi` package later stays a manifest change rather than a
-refactor (ADR 0002).
+refactor.
 
 ## Contribution
 

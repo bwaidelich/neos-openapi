@@ -9,7 +9,7 @@ use Neos\OpenApi\Exception\UnsupportedTypeException;
 /**
  * Resolves a {@see TypeReference} to its {@see TypeBinding}.
  *
- * The seam ADR 0002 rests on: core holds one of these and never learns what is behind it. The same provider is
+ * The seam this package's architecture rests on: core holds one of these and never learns what is behind it. The same provider is
  * used at compile time (to describe types) and at request time (to coerce and serialize them), which is what
  * guarantees the document and the runtime agree.
  *

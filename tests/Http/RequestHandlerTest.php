@@ -27,8 +27,8 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * The runtime, driven against the port with no schema engine behind it — which is what ADR 0002 promises and the
- * architecture test enforces. `tests/Schematic/RequestHandlingTest.php` covers the same ground with the real one.
+ * The runtime, driven against the port with no schema engine behind it — which is what the architecture test
+ * enforces. `tests/Schematic/RequestHandlingTest.php` covers the same ground with the real one.
  */
 final class RequestHandlerTest extends TestCase
 {

@@ -227,7 +227,7 @@ final readonly class ApiCompiler
      * In order: `#[AuthContext]` → `#[RequestBody]` → `#[Parameter]` → named in the path template ⇒ path →
      * otherwise query. An argument that reaches the end on a method that *could* carry a body is an error rather
      * than a guess: the predecessor silently treated the first such argument as the body, so reordering a
-     * signature changed the published API (ADR 0006).
+     * signature changed the published API.
      *
      * @return list<ClassifiedArgument>
      */

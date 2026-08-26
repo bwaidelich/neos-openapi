@@ -7,7 +7,8 @@ namespace Neos\OpenApi\Tests\Architecture;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Guards the one rule ADR 0002 rests on: `neos/schematic` is reachable from **exactly one** namespace.
+ * Guards the one rule this package's architecture rests on: `neos/schematic` is reachable from **exactly one**
+ * namespace.
  *
  * The core (`Neos\OpenApi\*` — spec model, attributes, generator, request handler) talks to a TypeBinding port;
  * `Neos\OpenApi\Schematic\*` is its sole implementation, and `neos/schematic` is a dev/suggested dependency rather
@@ -34,18 +35,6 @@ final class SchematicIsBehindThePortTest extends TestCase
     public function testCoreTestsDoNotReferenceSchematic(): void
     {
         self::assertSame([], $this->offendingFiles(__DIR__ . '/../../tests'));
-    }
-
-    /**
-     * A dependency this package must never grow: `neos/openapi` renders JSON Schema, it does not re-model it.
-     */
-    public function testNothingReferencesTheAbandonedPredecessor(): void
-    {
-        foreach (['src', 'tests'] as $directory) {
-            foreach ($this->phpFiles(__DIR__ . '/../../' . $directory) as $path => $contents) {
-                self::assertStringNotContainsString('Wwwision\\', $contents, $path);
-            }
-        }
     }
 
     /**

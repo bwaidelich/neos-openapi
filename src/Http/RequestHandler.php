@@ -258,7 +258,7 @@ final readonly class RequestHandler implements RequestHandlerInterface
             // the operation returns `void`, which the document describes as a 204
             return $this->responseFactory->createResponse(204);
         }
-        // serialized through the binding the document's schema came from, never json_encode'd raw (ADR 0005)
+        // serialized through the binding the document's schema came from, never json_encode'd raw
         return $this->json(200, 'application/json', $this->bindings->for($entry->successType)->serialize($result));
     }
 
