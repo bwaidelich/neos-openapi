@@ -19,6 +19,16 @@
         "neos/schematic": "To describe PHP types with attributes and coerce request data into them (Neos\\OpenApi\\Schematic)",
         "psr/container": "To resolve Api Class instances from a container when serving requests (ContainerApiClassResolver)"
     },
+    "repositories": [
+        {
+            "type": "vcs",
+            "url":  "https://github.com/bwaidelich/neos-jsonschema"
+        },
+        {
+            "type": "vcs",
+            "url":  "https://github.com/bwaidelich/neos-schematic"
+        }
+    ],
     "require-dev": {
         "roave/security-advisories": "dev-latest",
         "neos/schematic": "dev-main",
