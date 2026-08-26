@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace Neos\OpenApi\Compilation;
 
+use Neos\JsonSchema\IntegerSchema;
+use Neos\JsonSchema\ObjectSchema;
+use Neos\JsonSchema\Schema as JsonSchema;
+use Neos\JsonSchema\StringSchema;
+use Neos\JsonSchema\Support\ObjectProperties;
 use Neos\OpenApi\ApiDefinition;
 use Neos\OpenApi\Attributes\AuthContext;
 use Neos\OpenApi\Attributes\Operation;
@@ -21,6 +26,8 @@ use Neos\OpenApi\Exception\InvalidApiDefinitionException;
 use Neos\OpenApi\Problem\ProblemDocument;
 use Neos\OpenApi\Response\ApiResponse;
 use Neos\OpenApi\Response\ApiResponseWithHeaders;
+use Neos\OpenApi\Response\StreamResponse;
+use Neos\OpenApi\Response\TypedStreamResponse;
 use Neos\OpenApi\Spec\ComponentsObject;
 use Neos\OpenApi\Spec\HeaderObject;
 use Neos\OpenApi\Spec\HeaderOrReferenceObjectMap;
@@ -35,6 +42,7 @@ use Neos\OpenApi\Spec\PathsObject;
 use Neos\OpenApi\Spec\RequestBodyObject;
 use Neos\OpenApi\Spec\ResponseObject;
 use Neos\OpenApi\Spec\ResponsesObject;
+use Neos\OpenApi\Spec\SpecVersion;
 use Neos\OpenApi\Support\HttpStatusCode;
 use Neos\OpenApi\Support\MediaTypeRange;
 use Neos\OpenApi\Support\ParameterLocation;
@@ -67,6 +75,8 @@ final readonly class ApiCompiler
         $dispatchTable = DispatchTable::create();
         /** @var array<string, string> $operationIds operationId => where it was first seen */
         $operationIds = [];
+        // whether any operation needed a 3.2-only field (`itemSchema`)
+        $requiresItemSchema = false;
 
         foreach ($api->apiClasses as $registered) {
             $reflectionClass = new \ReflectionClass($registered->className);
@@ -102,10 +112,11 @@ final readonly class ApiCompiler
                 $arguments = $this->classify($api, $registered, $method, $operation);
                 $branches = $this->returnBranches($method);
                 $compiled = $this->compileOperation($api, $registered, $operation, $operationId, $arguments, $branches, $components);
+                $requiresItemSchema = $requiresItemSchema || $compiled['requiresItemSchema'];
                 $existing = $paths->get($operation->path);
                 $paths = $existing === null
-                    ? $paths->with($operation->path, PathObject::create()->withOperation($operation->method, $compiled))
-                    : $paths->replace($operation->path, $existing->withOperation($operation->method, $compiled));
+                    ? $paths->with($operation->path, PathObject::create()->withOperation($operation->method, $compiled['operation']))
+                    : $paths->replace($operation->path, $existing->withOperation($operation->method, $compiled['operation']));
 
                 $dispatchTable = $dispatchTable->with($operation->path, $operation->method, new DispatchEntry(
                     $registered->className,
@@ -132,6 +143,7 @@ final readonly class ApiCompiler
                 security: $api->security,
                 tags: $tags->isEmpty() ? null : $tags,
                 externalDocs: $api->externalDocs,
+                openapi: $requiresItemSchema ? SpecVersion::ITEM_SCHEMA_VALUE : null,
             ),
             $dispatchTable,
         );
@@ -140,6 +152,7 @@ final readonly class ApiCompiler
     /**
      * @param list<ClassifiedArgument> $arguments
      * @param array{apiResponses: list<class-string<ApiResponse>>, success: TypeReference|null, empty: bool} $branches
+     * @return array{operation: OperationObject, requiresItemSchema: bool}
      */
     private function compileOperation(
         ApiDefinition $api,
@@ -149,7 +162,7 @@ final readonly class ApiCompiler
         array $arguments,
         array $branches,
         SchemaComponents $components,
-    ): OperationObject {
+    ): array {
         $parameters = [];
         $requestBody = null;
         foreach ($arguments as $classified) {
@@ -178,7 +191,8 @@ final readonly class ApiCompiler
             );
         }
 
-        $responses = $this->compileResponses($branches, $components);
+        $compiledResponses = $this->compileResponses($branches, $components);
+        $responses = $compiledResponses['responses'];
         if (($parameters !== [] || $requestBody !== null) && !$responses->hasResponseForStatusCode(HttpStatusCode::fromInteger(400))) {
             $responses = $responses->with(HttpStatusCode::fromInteger(400), new ResponseObject(
                 description: 'The request could not be understood',
@@ -196,17 +210,20 @@ final readonly class ApiCompiler
             ));
         }
 
-        return new OperationObject(
-            tags: [$registered->tag],
-            summary: $operation->summary,
-            description: $operation->description,
-            operationId: $operationId,
-            parameters: $parameters === [] ? null : new ParameterOrReferenceObjects(...$parameters),
-            requestBody: $requestBody,
-            responses: $responses->isEmpty() ? null : $responses,
-            deprecated: $operation->deprecated,
-            security: $operation->security,
-        );
+        return [
+            'operation' => new OperationObject(
+                tags: [$registered->tag],
+                summary: $operation->summary,
+                description: $operation->description,
+                operationId: $operationId,
+                parameters: $parameters === [] ? null : new ParameterOrReferenceObjects(...$parameters),
+                requestBody: $requestBody,
+                responses: $responses->isEmpty() ? null : $responses,
+                deprecated: $operation->deprecated,
+                security: $operation->security,
+            ),
+            'requiresItemSchema' => $compiledResponses['requiresItemSchema'],
+        ];
     }
 
     /**
@@ -403,12 +420,16 @@ final readonly class ApiCompiler
 
     /**
      * @param array{apiResponses: list<class-string<ApiResponse>>, success: TypeReference|null, empty: bool} $branches
+     * @return array{responses: ResponsesObject, requiresItemSchema: bool}
      */
-    private function compileResponses(array $branches, SchemaComponents $components): ResponsesObject
+    private function compileResponses(array $branches, SchemaComponents $components): array
     {
         $responses = ResponsesObject::create();
+        $requiresItemSchema = false;
         foreach ($branches['apiResponses'] as $responseClassName) {
-            $responses = $responses->with($responseClassName::statusCode(), $this->apiResponse($responseClassName, $components));
+            $compiled = $this->apiResponse($responseClassName, $components);
+            $responses = $responses->with($responseClassName::statusCode(), $compiled['response']);
+            $requiresItemSchema = $requiresItemSchema || $compiled['requiresItemSchema'];
         }
         if ($branches['success'] !== null) {
             $responses = $responses->with(HttpStatusCode::fromInteger(200), new ResponseObject(
@@ -423,14 +444,19 @@ final readonly class ApiCompiler
         if ($branches['empty'] && !$responses->hasResponseForStatusCode(HttpStatusCode::fromInteger(204))) {
             $responses = $responses->with(HttpStatusCode::fromInteger(204), new ResponseObject(description: 'No Content'));
         }
-        return $responses;
+        return ['responses' => $responses, 'requiresItemSchema' => $requiresItemSchema];
     }
 
     /**
      * @param class-string<ApiResponse> $responseClassName
+     * @return array{response: ResponseObject, requiresItemSchema: bool}
      */
-    private function apiResponse(string $responseClassName, SchemaComponents $components): ResponseObject
+    private function apiResponse(string $responseClassName, SchemaComponents $components): array
     {
+        if (is_a($responseClassName, StreamResponse::class, true)) {
+            /** @var class-string<StreamResponse> $responseClassName */
+            return $this->streamResponse($responseClassName, $components);
+        }
         $bodyType = $responseClassName::bodyType();
         $content = null;
         if ($bodyType !== null) {
@@ -440,11 +466,56 @@ final readonly class ApiCompiler
                 new MediaTypeObject(schema: $this->bindings->for($bodyType)->jsonSchema($components)),
             );
         }
-        return new ResponseObject(
-            description: $responseClassName::description(),
-            // headers are not tied to a body: a bodyless 204 may still carry a Location
-            headers: $this->responseHeaders($responseClassName, $components),
-            content: $content,
+        return [
+            'response' => new ResponseObject(
+                description: $responseClassName::description(),
+                // headers are not tied to a body: a bodyless 204 may still carry a Location
+                headers: $this->responseHeaders($responseClassName, $components),
+                content: $content,
+            ),
+            'requiresItemSchema' => false,
+        ];
+    }
+
+    /**
+     * A {@see StreamResponse}'s body is a sequence, not one value — there is no `bodyType()` to build a `schema`
+     * from. A {@see TypedStreamResponse} instead describes its items via `itemSchema`, shaped as the OpenAPI
+     * registry's own SSE examples are: `data`, `event`, `id` and `retry` as properties of one object, with `data`
+     * narrowed to the declared item type.
+     *
+     * @param class-string<StreamResponse> $responseClassName
+     * @return array{response: ResponseObject, requiresItemSchema: bool}
+     * @see https://spec.openapis.org/registry/media-type/sse
+     */
+    private function streamResponse(string $responseClassName, SchemaComponents $components): array
+    {
+        if (is_a($responseClassName, TypedStreamResponse::class, true)) {
+            $mediaType = new MediaTypeObject(itemSchema: $this->sseItemSchema($responseClassName::itemType(), $components));
+            $requiresItemSchema = true;
+        } else {
+            $mediaType = new MediaTypeObject();
+            $requiresItemSchema = false;
+        }
+        return [
+            'response' => new ResponseObject(
+                description: $responseClassName::description(),
+                headers: $this->responseHeaders($responseClassName, $components),
+                content: MediaTypeObjectMap::create()->with($responseClassName::contentType(), $mediaType),
+            ),
+            'requiresItemSchema' => $requiresItemSchema,
+        ];
+    }
+
+    private function sseItemSchema(TypeReference $itemType, SchemaComponents $components): JsonSchema
+    {
+        return ObjectSchema::create(
+            properties: ObjectProperties::create(
+                data: $this->bindings->for($itemType)->jsonSchema($components),
+                event: StringSchema::create(description: 'The event name'),
+                id: StringSchema::create(description: 'The event ID'),
+                retry: IntegerSchema::create(description: 'The reconnection time in milliseconds', minimum: 0),
+            ),
+            required: ['data'],
         );
     }
 

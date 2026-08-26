@@ -17,16 +17,19 @@ use Neos\OpenApi\Spec\InfoObject;
 use Neos\OpenApi\Spec\SecurityRequirementObject;
 use Neos\OpenApi\Spec\SecuritySchemeObject;
 use Neos\OpenApi\Spec\SecuritySchemeOrReferenceObjectMap;
+use Neos\OpenApi\Spec\SpecVersion;
 use Neos\OpenApi\Support\HttpMethod;
 use Neos\OpenApi\Support\ParameterLocation;
 use Neos\OpenApi\Support\RelativePath;
 use Neos\OpenApi\Tests\Compilation\Fixtures\AnonymousAuthContextApi;
 use Neos\OpenApi\Tests\Compilation\Fixtures\AuthorApi;
 use Neos\OpenApi\Tests\Compilation\Fixtures\CollidingPathApi;
+use Neos\OpenApi\Tests\Compilation\Fixtures\CommentApi;
 use Neos\OpenApi\Tests\Compilation\Fixtures\Invalid\MissingReturnTypeApi;
 use Neos\OpenApi\Tests\Compilation\Fixtures\OptionalPathParameterApi;
 use Neos\OpenApi\Tests\Compilation\Fixtures\PostApi;
 use Neos\OpenApi\Tests\Compilation\Fixtures\ResponseHeaderApi;
+use Neos\OpenApi\Tests\Compilation\Fixtures\StreamApi;
 use Neos\OpenApi\Tests\Compilation\Fixtures\TwoSuccessBranchesApi;
 use Neos\OpenApi\Tests\Compilation\Fixtures\UnaccountedArgumentApi;
 use Neos\OpenApi\Tests\Compilation\Fixtures\UnsecuredAuthContextApi;
@@ -503,5 +506,33 @@ final class ApiCompilerTest extends TestCase
         sort($published);
         sort($dispatchable);
         self::assertSame($published, $dispatchable);
+    }
+
+    public function testAnUntypedStreamResponseDocumentsItsContentTypeWithNoSchema(): void
+    {
+        $compiled = $this->compiler->compile($this->definition()->withOperationsFrom(StreamApi::class));
+        $document = $this->document($compiled);
+
+        self::assertSame(SpecVersion::VALUE, $document['openapi']);
+        $mediaType = $this->arrayAt($document, 'paths', '/heartbeat', 'get', 'responses', 200, 'content', 'text/plain');
+        self::assertArrayNotHasKey('schema', $mediaType);
+        self::assertArrayNotHasKey('itemSchema', $mediaType);
+    }
+
+    /**
+     * `itemSchema` is an OpenAPI 3.2 field, so a document that needs one advertises that version rather than the
+     * {@see SpecVersion::VALUE} every other document uses.
+     */
+    public function testATypedStreamResponseDocumentsAnItemSchemaAndBumpsTheDocumentVersion(): void
+    {
+        $compiled = $this->compiler->compile($this->definition()->withOperationsFrom(CommentApi::class));
+        $document = $this->document($compiled);
+
+        self::assertSame(SpecVersion::ITEM_SCHEMA_VALUE, $document['openapi']);
+        $mediaType = $this->arrayAt($document, 'paths', '/comments', 'get', 'responses', 200, 'content', 'text/event-stream');
+        self::assertArrayNotHasKey('schema', $mediaType);
+        $itemSchema = $this->arrayAt(['itemSchema' => $mediaType['itemSchema']], 'itemSchema');
+        self::assertSame(['data'], $itemSchema['required']);
+        self::assertSame(['data', 'event', 'id', 'retry'], array_keys($this->arrayAt($itemSchema, 'properties')));
     }
 }

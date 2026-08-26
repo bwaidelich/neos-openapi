@@ -160,4 +160,13 @@ foreach ($response->getHeaders() as $name => $values) {
     }
 }
 
-echo $response->getBody();
+// read()+flush() in a loop rather than casting the whole body to a string at once — a streaming response (e.g. a
+// StreamResponse/SSE endpoint, see ADR 0007) is only actually streamed if the body is drained incrementally
+$body = $response->getBody();
+while (!$body->eof()) {
+    echo $body->read(8192);
+    if (ob_get_level() > 0) {
+        ob_flush();
+    }
+    flush();
+}

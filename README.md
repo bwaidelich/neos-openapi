@@ -697,6 +697,7 @@ The design decisions and their trade-offs:
 - the spec model renders, but does not parse
 - response bodies are serialized by schema, not `json_encode`
 - the request body is declared, never inferred
+- streaming responses use a package-owned stream; a typed one advertises OpenAPI 3.2
 
 [CONTEXT.md](CONTEXT.md) is the glossary — the vocabulary this codebase holds itself to.
 

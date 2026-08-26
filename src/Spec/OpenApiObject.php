@@ -11,8 +11,10 @@ use Neos\OpenApi\Support\SerializesNonNullMembers;
 /**
  * A complete OpenAPI document — the root object, and the thing you publish.
  *
- * `openapi` is not a constructor argument: this package emits {@see SpecVersion::VALUE} and nothing else.
- * The document is render-only; there is deliberately no way to read one back in.
+ * `openapi` is not an ordinary constructor argument: it defaults to {@see SpecVersion::VALUE} and nothing else
+ * chooses it — the one exception is {@see \Neos\OpenApi\Compilation\ApiCompiler}, which passes
+ * {@see SpecVersion::ITEM_SCHEMA_VALUE} for itself when a document needs a 3.2-only field. The document is
+ * render-only; there is deliberately no way to read one back in.
  *
  * @see https://spec.openapis.org/oas/v3.1.1#openapi-object
  */
@@ -31,8 +33,9 @@ final readonly class OpenApiObject implements JsonSerializable
         public TagObjects|null $tags = null,
         public ExternalDocumentationObject|null $externalDocs = null,
         public string|null $jsonSchemaDialect = null,
+        string|null $openapi = null,
     ) {
-        $this->openapi = SpecVersion::VALUE;
+        $this->openapi = $openapi ?? SpecVersion::VALUE;
     }
 
     /**
@@ -50,6 +53,7 @@ final readonly class OpenApiObject implements JsonSerializable
             tags: $this->tags,
             externalDocs: $this->externalDocs,
             jsonSchemaDialect: $this->jsonSchemaDialect,
+            openapi: $this->openapi,
         );
     }
 

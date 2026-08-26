@@ -17,6 +17,8 @@ use Neos\OpenApi\Problem\ProblemDocument;
 use Neos\OpenApi\Response\ApiResponse;
 use Neos\OpenApi\Response\ApiResponseWithHeaders;
 use Neos\OpenApi\Response\ResponseHeader;
+use Neos\OpenApi\Response\SseEvent;
+use Neos\OpenApi\Response\StreamResponse;
 use Neos\OpenApi\Spec\SecurityRequirementObject;
 use Neos\OpenApi\Spec\SecuritySchemeObject;
 use Neos\OpenApi\Support\HttpMethod;
@@ -240,6 +242,9 @@ final readonly class RequestHandler implements RequestHandlerInterface
 
     private function respond(DispatchEntry $entry, mixed $result): ResponseInterface
     {
+        if ($result instanceof StreamResponse) {
+            return $this->respondStream($result);
+        }
         if ($result instanceof ApiResponse) {
             $bodyType = $result::bodyType();
             if ($bodyType === null) {
@@ -260,6 +265,33 @@ final readonly class RequestHandler implements RequestHandlerInterface
         }
         // serialized through the binding the document's schema came from, never json_encode'd raw
         return $this->json(200, 'application/json', $this->bindings->for($entry->successType)->serialize($result));
+    }
+
+    /**
+     * Unlike every other response, this one is never buffered into a string: {@see GeneratorStream} pulls chunks
+     * from {@see StreamResponse::stream()} on demand, so the connection carries each one as it becomes available
+     * rather than only once the whole thing exists.
+     */
+    private function respondStream(StreamResponse $result): ResponseInterface
+    {
+        $response = $this->responseFactory->createResponse($result::statusCode()->value)
+            ->withHeader('Content-Type', $result::contentType()->value)
+            ->withBody(new GeneratorStream($this->streamChunks($result)));
+        return $result instanceof ApiResponseWithHeaders ? $this->withDeclaredHeaders($response, $result) : $response;
+    }
+
+    /**
+     * Normalises what a {@see StreamResponse} yields into wire bytes: a raw `string` passes through untouched, and
+     * an {@see SseEvent} is rendered through the same {@see TypeBindingProvider} every other response body goes
+     * through, so a typed event's data cannot drift from the `itemSchema` the document advertised for it.
+     *
+     * @return \Generator<int, string>
+     */
+    private function streamChunks(StreamResponse $result): \Generator
+    {
+        foreach ($result->stream() as $item) {
+            yield $item instanceof SseEvent ? $item->render($this->bindings) : $item;
+        }
     }
 
     /**
