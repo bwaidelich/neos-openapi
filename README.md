@@ -454,20 +454,20 @@ try {
 
 The other half of a compilation is a Dispatch Table, and `RequestHandler` is what consumes it — a PSR-15 handler
 over any PSR-7/PSR-17 implementation. Give it the compilation, the *same* `TypeBindingProvider` the document was
-generated with, and something that turns an Api Class name into an instance:
+generated with, and a PSR-11 container its Api Classes can be read out of:
 
 ```php
 // ...
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\ServerRequest;
-use Neos\OpenApi\Http\InstanceApiClassResolver;
+use Neos\OpenApi\Support\FixedContainer;
 use Neos\OpenApi\Http\RequestHandler;
 
 $factory = new HttpFactory(); // any PSR-17 response + stream factory
 $handler = new RequestHandler(
     $compiler->compile($blog),
     $provider,
-    new InstanceApiClassResolver(new PostApi(), new LookupApi(), new DraftApi(), new AccountApi()),
+    new FixedContainer(new PostApi(), new LookupApi(), new DraftApi(), new AccountApi()),
     $factory,
     $factory,
     $callers,
@@ -531,9 +531,9 @@ two are responses the compiler put in the document — so what a client reads is
 operation *throws* travels on untouched: turning a domain exception into a status code is an application's
 decision, and a middleware around this handler is where it belongs.
 
-Api Class instances are resolved per request, so they may be request-scoped: `ContainerApiClassResolver` reads them
-out of a PSR-11 container, `InstanceApiClassResolver` takes them up front, and `ApiClassResolver` is a one-method
-interface for anything else.
+Api Class instances are read out of a PSR-11 container per request, so they may be request-scoped — pass your
+framework's container, or `FixedContainer`, whose entries are fixed at construction and which is all the wiring
+an application without a container needs.
 
 > Query parameters are read from `getQueryParams()` and cookies from `getCookieParams()` — what PSR-7 says a
 > *server* request carries, not what its URI happens to spell. Every real PSR-7 server fills them in (as does

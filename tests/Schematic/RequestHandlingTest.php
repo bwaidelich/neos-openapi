@@ -8,11 +8,11 @@ use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\ServerRequest;
 use Neos\OpenApi\ApiDefinition;
 use Neos\OpenApi\Compilation\ApiCompiler;
-use Neos\OpenApi\Http\InstanceApiClassResolver;
 use Neos\OpenApi\Http\RequestHandler;
 use Neos\OpenApi\Problem\ProblemDocument;
 use Neos\OpenApi\Schematic\SchematicTypeBindingProvider;
 use Neos\OpenApi\Spec\InfoObject;
+use Neos\OpenApi\Support\FixedContainer;
 use Neos\OpenApi\Tests\Schematic\Fixtures\BlogApi;
 use Neos\Schematic\Attributes\ReflectionMiddleware;
 use Neos\Schematic\Schematic;
@@ -40,7 +40,7 @@ final class RequestHandlingTest extends TestCase
             ApiDefinition::create(info: new InfoObject(title: 'Blog', version: '1.0.0'))->withOperationsFrom(BlogApi::class),
         );
         $factory = new HttpFactory();
-        $this->handler = new RequestHandler($compiled, $provider, new InstanceApiClassResolver($this->api), $factory, $factory);
+        $this->handler = new RequestHandler($compiled, $provider, new FixedContainer($this->api), $factory, $factory);
     }
 
     private function handle(string $method, string $uri, string|null $body = null): ResponseInterface

@@ -10,12 +10,12 @@ use Neos\OpenApi\ApiDefinition;
 use Neos\OpenApi\Compilation\ApiCompiler;
 use Neos\OpenApi\Compilation\CompiledApi;
 use Neos\OpenApi\Http\AuthContextProvider;
-use Neos\OpenApi\Http\InstanceApiClassResolver;
 use Neos\OpenApi\Http\RequestHandler;
 use Neos\OpenApi\Spec\InfoObject;
 use Neos\OpenApi\Spec\SecurityRequirementObject;
 use Neos\OpenApi\Spec\SecuritySchemeObject;
 use Neos\OpenApi\Spec\SecuritySchemeOrReferenceObjectMap;
+use Neos\OpenApi\Support\FixedContainer;
 use Neos\OpenApi\Tests\Http\Fixtures\Broken\BrokenHeaderApi;
 use Neos\OpenApi\Tests\Http\Fixtures\Caller;
 use Neos\OpenApi\Tests\Http\Fixtures\NewTodo;
@@ -71,7 +71,7 @@ final class RequestHandlerTest extends TestCase
         return new RequestHandler(
             $this->compiled,
             new FixtureTypeBindingProvider(),
-            new InstanceApiClassResolver($this->api),
+            new FixedContainer($this->api),
             $factory,
             $factory,
             $authContexts,
@@ -350,13 +350,18 @@ final class RequestHandlerTest extends TestCase
     {
         $resolved = 0;
         $factory = new HttpFactory();
-        $resolver = new class ($this->api, $resolved) implements \Neos\OpenApi\Http\ApiClassResolver {
+        $resolver = new class ($this->api, $resolved) implements \Psr\Container\ContainerInterface {
             public function __construct(private readonly TodoApi $api, public int &$resolved) {}
 
-            public function resolve(string $className): object
+            public function get(string $id): object
             {
                 $this->resolved++;
                 return $this->api;
+            }
+
+            public function has(string $id): bool
+            {
+                return $id === TodoApi::class;
             }
         };
         $handler = new RequestHandler($this->compiled, new FixtureTypeBindingProvider(), $resolver, $factory, $factory);
@@ -421,7 +426,7 @@ final class RequestHandlerTest extends TestCase
         $compiled = (new ApiCompiler(new FixtureTypeBindingProvider()))->compile(
             ApiDefinition::create(info: new InfoObject(title: 'Broken', version: '1.0.0'))->withOperationsFrom(BrokenHeaderApi::class),
         );
-        $handler = new RequestHandler($compiled, new FixtureTypeBindingProvider(), new InstanceApiClassResolver($api), $factory, $factory);
+        $handler = new RequestHandler($compiled, new FixtureTypeBindingProvider(), new FixedContainer($api), $factory, $factory);
 
         $this->expectException(\LogicException::class);
         $this->expectExceptionCode($code);
@@ -434,7 +439,7 @@ final class RequestHandlerTest extends TestCase
         $handler = new RequestHandler(
             $this->compiled,
             new FixtureTypeBindingProvider(),
-            new InstanceApiClassResolver($this->api),
+            new FixedContainer($this->api),
             $factory,
             $factory,
         );

@@ -15,7 +15,7 @@ use Neos\OpenApi\Attributes\RequestBody;
 use Neos\OpenApi\Binding\TypeReference;
 use Neos\OpenApi\Compilation\ApiCompiler;
 use Neos\OpenApi\Http\AuthContextProvider;
-use Neos\OpenApi\Http\InstanceApiClassResolver;
+use Neos\OpenApi\Support\FixedContainer;
 use Neos\OpenApi\Http\RequestHandler;
 use Neos\OpenApi\Response\ApiResponse;
 use Neos\OpenApi\Schematic\SchematicTypeBindingProvider;
@@ -137,7 +137,7 @@ $factory = new HttpFactory(); // any PSR-17 response + stream factory
 $handler = new RequestHandler(
     $compiledApi,
     $provider,
-    new InstanceApiClassResolver(new PostApi(), new AccountApi()),
+    new FixedContainer(new PostApi(), new AccountApi()),
     $factory,
     $factory,
     $callers,

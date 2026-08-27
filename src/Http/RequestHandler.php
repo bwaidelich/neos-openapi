@@ -23,6 +23,7 @@ use Neos\OpenApi\Support\HttpMethod;
 use Neos\OpenApi\Support\HttpStatusCode;
 use Neos\OpenApi\Support\MediaTypeRange;
 use Neos\OpenApi\Support\SecuritySchemeType;
+use Psr\Container\ContainerInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -53,7 +54,7 @@ final readonly class RequestHandler implements RequestHandlerInterface
     public function __construct(
         private CompiledApi $api,
         private TypeBindingProvider $bindings,
-        private ApiClassResolver $apiClasses,
+        private ContainerInterface $apiClasses,
         private ResponseFactoryInterface $responseFactory,
         private StreamFactoryInterface $streamFactory,
         private AuthContextProvider|null $authContexts = null,
@@ -225,12 +226,12 @@ final readonly class RequestHandler implements RequestHandlerInterface
      */
     private function invoke(DispatchEntry $entry, array $arguments): mixed
     {
-        $apiClass = $this->apiClasses->resolve($entry->apiClassName);
+        $apiClass = $this->apiClasses->get($entry->apiClassName);
         $callable = [$apiClass, $entry->methodName];
         if (!is_callable($callable)) {
             throw new \LogicException(sprintf(
                 'The Api Class %s has no public method "%s"',
-                $apiClass::class,
+                get_debug_type($apiClass),
                 $entry->methodName,
             ), 1783500414);
         }

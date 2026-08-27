@@ -13,11 +13,11 @@
         "neos/jsonschema": "dev-main",
         "psr/http-message": "^1 || ^2",
         "psr/http-server-handler": "^1",
-        "psr/http-factory": "^1"
+        "psr/http-factory": "^1",
+        "psr/container": "^1 || ^2"
     },
     "suggest": {
-        "neos/schematic": "To describe PHP types with attributes and coerce request data into them (Neos\\OpenApi\\Schematic)",
-        "psr/container": "To resolve Api Class instances from a container when serving requests (ContainerApiClassResolver)"
+        "neos/schematic": "To describe PHP types with attributes and coerce request data into them (Neos\\OpenApi\\Schematic)"
     },
     "repositories": [
         {
@@ -35,7 +35,6 @@
         "phpstan/phpstan": "^2",
         "friendsofphp/php-cs-fixer": "^3",
         "phpunit/phpunit": "^10 || ^11 || ^12",
-        "psr/container": "^1 || ^2",
         "guzzlehttp/psr7": "^2.7"
     },
     "autoload": {
