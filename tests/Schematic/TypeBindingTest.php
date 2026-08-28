@@ -16,7 +16,6 @@ use Neos\OpenApi\Schematic\SchematicTypeBindingProvider;
 use Neos\OpenApi\Tests\Schematic\Fixtures\Author;
 use Neos\OpenApi\Tests\Schematic\Fixtures\AuthorName;
 use Neos\OpenApi\Tests\Schematic\Fixtures\AuthorNames;
-use Neos\OpenApi\Tests\Schematic\Fixtures\Block;
 use Neos\OpenApi\Tests\Schematic\Fixtures\Collaboration;
 use Neos\OpenApi\Tests\Schematic\Fixtures\Colliding\Rival;
 use Neos\OpenApi\Tests\Schematic\Fixtures\PostStatus;
@@ -177,32 +176,6 @@ final class TypeBindingTest extends TestCase
         self::assertIsArray($list);
         self::assertSame('array', $list['type']);
         self::assertSame(['$ref' => '#/components/schemas/AuthorName'], $list['items']);
-    }
-
-    /**
-     * The discriminator's mapping holds class-strings upstream; OpenAPI needs component references.
-     */
-    public function testADiscriminatorMappingIsRewrittenToComponentReferences(): void
-    {
-        $components = SchemaComponents::create();
-        $this->provider->for(TypeReference::of(Block::class))->jsonSchema($components);
-
-        $block = $this->encode($components->toSchemaObjectMap())['Block'];
-        self::assertIsArray($block);
-        self::assertSame(
-            [
-                'propertyName' => 'kind',
-                'mapping' => [
-                    'text' => '#/components/schemas/TextBlock',
-                    'image' => '#/components/schemas/ImageBlock',
-                ],
-            ],
-            $block['discriminator'],
-        );
-        self::assertSame(
-            [['$ref' => '#/components/schemas/TextBlock'], ['$ref' => '#/components/schemas/ImageBlock']],
-            $block['oneOf'],
-        );
     }
 
     public function testComponentsAreSortedSoTheDocumentDoesNotDependOnVisitOrder(): void

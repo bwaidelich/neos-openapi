@@ -18,9 +18,9 @@ final readonly class DispatchEntry
      * @param class-string $apiClassName
      * @param list<ArgumentBinding> $arguments
      * @param TypeReference|null $successType the *declared* type of a successful result, or null for `void`.
-     *                                        Declared rather than the returned value's own class, because a
-     *                                        polymorphic return type has to be serialized as the union — that is
-     *                                        what carries the discriminator tag.
+     *                                        Declared rather than the returned value's own class, because the
+     *                                        declared type is what the document describes — serializing through
+     *                                        anything else would emit a body the document does not promise.
      */
     public function __construct(
         public string $apiClassName,

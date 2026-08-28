@@ -354,8 +354,8 @@ final readonly class ApiCompiler
      *
      * At most *one* branch may be an ordinary type: each would become a `200`, so a second would silently
      * overwrite the first and the document would describe only whichever came last. The declared type is also what
-     * the runtime serializes through — not the returned value's own class, since a polymorphic return has to go
-     * out as its union to carry the discriminator tag.
+     * the runtime serializes through — not the returned value's own class, since only the declared one is what the
+     * document promises.
      *
      * @return array{apiResponses: list<class-string<ApiResponse>>, success: TypeReference|null, empty: bool}
      */

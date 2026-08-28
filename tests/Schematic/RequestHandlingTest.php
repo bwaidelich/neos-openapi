@@ -25,7 +25,7 @@ use Psr\Http\Message\ResponseInterface;
  *
  * `tests/Http/RequestHandlerTest.php` covers the handler's own behaviour against the port with no engine at all —
  * which is what proves core needs none. This is the other half: that the two actually fit together, and that a
- * value object, an enum and a discriminated union survive the round trip.
+ * value object, an enum and a list survive the round trip.
  */
 final class RequestHandlingTest extends TestCase
 {
@@ -76,14 +76,6 @@ final class RequestHandlingTest extends TestCase
         self::assertSame(['everyone'], $this->decoded($this->handle('GET', '/authors')));
     }
 
-    public function testAPolymorphicBodySurvivesTheRoundTripWithItsTag(): void
-    {
-        $response = $this->handle('POST', '/blocks', '{"kind":"text","body":"Hello"}');
-
-        self::assertSame(200, $response->getStatusCode());
-        self::assertSame(['kind' => 'text', 'body' => 'Hello'], $this->decoded($response));
-    }
-
     /**
      * The other half of the header the document describes: the value goes out through the very binding that
      * schema came from, so a `AuthorName` reaches the wire as the string its schema says it is.
@@ -111,23 +103,13 @@ final class RequestHandlingTest extends TestCase
         self::assertSame(['too_long'], array_column($issues, 'code'));
     }
 
-    public function testAnUnknownDiscriminatorTagIsReportedAtTheTagsOwnPath(): void
-    {
-        $response = $this->handle('POST', '/blocks', '{"kind":"video","body":"Hello"}');
-        $issues = $this->decoded($response)['issues'];
-
-        self::assertSame(400, $response->getStatusCode());
-        self::assertIsArray($issues);
-        self::assertSame(['/body/kind'], array_column($issues, 'pointer'));
-    }
-
     /**
      * The document promises `application/problem+json` for a 400, and this is the payload that arrives — the same
      * class, through the same schema.
      */
     public function testTheRejectionValidatesAgainstTheSchemaTheDocumentAdvertises(): void
     {
-        $response = $this->handle('POST', '/blocks', '{"kind":"video"}');
+        $response = $this->handle('POST', '/authors', '""');
 
         $result = ProblemDocument::schema()->validate($this->decoded($response));
 

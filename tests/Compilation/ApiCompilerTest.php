@@ -457,8 +457,8 @@ final class ApiCompilerTest extends TestCase
     }
 
     /**
-     * The runtime serializes through the *declared* success type, not the returned value's own class — a
-     * polymorphic return has to go out as its union to carry the discriminator tag.
+     * The runtime serializes through the *declared* success type, not the returned value's own class — only the
+     * declared one is what the document promises.
      */
     public function testTheEntryCarriesTheDeclaredSuccessType(): void
     {

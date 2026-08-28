@@ -8,9 +8,7 @@ use Neos\JsonSchema\AnyOfSchema;
 use Neos\JsonSchema\ArraySchema as JsonArraySchema;
 use Neos\JsonSchema\NullSchema;
 use Neos\JsonSchema\ObjectSchema as JsonObjectSchema;
-use Neos\JsonSchema\OneOfSchema as JsonOneOfSchema;
 use Neos\JsonSchema\Schema as JsonSchema;
-use Neos\JsonSchema\Support\Discriminator;
 use Neos\JsonSchema\Support\ObjectProperties;
 use Neos\OpenApi\Compilation\SchemaComponents;
 use Neos\OpenApi\Spec\SchemaObjectMap;
@@ -55,8 +53,6 @@ final class SchemaHoister
      * The short class name, which is what makes a published document readable. Collisions are the caller's
      * problem to hear about, and {@see SchemaComponents} raises them.
      *
-     * Takes a plain string, not a `class-string`: it is also applied to the values of a discriminator mapping,
-     * which `neos/jsonschema` types as strings because it has no notion of classes.
      */
     public static function componentName(string $className): string
     {
@@ -73,7 +69,6 @@ final class SchemaHoister
             Kind::Scalar => $node->jsonSchema,
             Kind::Object => $this->object($node, $components),
             Kind::List => $this->list($node, $components),
-            Kind::Union => $this->union($node, $components),
         };
     }
 
@@ -95,28 +90,6 @@ final class SchemaHoister
             return $node->jsonSchema;
         }
         return $node->jsonSchema->with(items: $this->hoist($node->items, $components));
-    }
-
-    /**
-     * A discriminated union renders as `oneOf`, with the discriminator's mapping rewritten from class-strings to
-     * component references — which is the form OpenAPI expects, and the reason the mapping is required upstream.
-     */
-    private function union(Schema $node, SchemaComponents $components): JsonSchema
-    {
-        if (!$node->jsonSchema instanceof JsonOneOfSchema || $node->jsonSchema->discriminator === null) {
-            return $node->jsonSchema;
-        }
-        $branches = [];
-        foreach ($node->candidates as $candidate) {
-            $branches[] = $this->hoist($candidate, $components);
-        }
-        $mapping = [];
-        foreach ($node->jsonSchema->discriminator->mapping ?? [] as $value => $className) {
-            $mapping[$value] = '#/components/schemas/' . self::componentName($className);
-        }
-        return JsonOneOfSchema::create(...$branches)->withDiscriminator(
-            new Discriminator($node->jsonSchema->discriminator->propertyName, $mapping === [] ? null : $mapping),
-        );
     }
 
     /**

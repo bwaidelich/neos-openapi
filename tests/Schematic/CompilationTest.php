@@ -61,7 +61,7 @@ final class CompilationTest extends TestCase
         $schemas = $this->arrayAt($this->compile(), 'components', 'schemas');
 
         self::assertSame(
-            ['Author', 'AuthorName', 'AuthorNames', 'Block', 'ImageBlock', 'PostCount', 'PostStatus', 'ProblemDocument', 'TextBlock'],
+            ['Author', 'AuthorName', 'AuthorNames', 'PostCount', 'PostStatus', 'ProblemDocument'],
             array_keys($schemas),
         );
     }
@@ -108,23 +108,6 @@ final class CompilationTest extends TestCase
         self::assertSame(['draft', 'published'], $this->arrayAt($document, 'components', 'schemas', 'PostStatus', 'enum'));
     }
 
-    public function testAPolymorphicRequestBodyKeepsItsDiscriminator(): void
-    {
-        $document = $this->compile();
-
-        self::assertSame(
-            ['$ref' => '#/components/schemas/Block'],
-            $this->arrayAt($document, 'paths', '/blocks', 'post', 'requestBody', 'content', 'application/json', 'schema'),
-        );
-        self::assertSame(
-            [
-                'propertyName' => 'kind',
-                'mapping' => ['text' => '#/components/schemas/TextBlock', 'image' => '#/components/schemas/ImageBlock'],
-            ],
-            $this->arrayAt($document, 'components', 'schemas', 'Block', 'discriminator'),
-        );
-    }
-
     public function testAPathParameterIsRequiredAndReferencesItsType(): void
     {
         $parameter = $this->arrayAt($this->compile(), 'paths', '/authors/{name}', 'get', 'parameters', 0);
@@ -154,17 +137,17 @@ final class CompilationTest extends TestCase
             ApiDefinition::create(info: new InfoObject(title: 'Blog', version: '1.0.0'))->withOperationsFrom(BlogApi::class),
         );
 
-        $entry = $compiled->dispatchTable->find(RelativePath::fromString('/blocks'), HttpMethod::POST);
+        $entry = $compiled->dispatchTable->find(RelativePath::fromString('/authors'), HttpMethod::POST);
         self::assertNotNull($entry);
         self::assertSame(BlogApi::class, $entry->apiClassName);
-        self::assertSame('addBlock', $entry->methodName);
+        self::assertSame('addAuthor', $entry->methodName);
         self::assertSame('body', $entry->arguments[0]->source->value);
 
         // and the binding the runtime will use coerces a real payload
         $binding = (new SchematicTypeBindingProvider(Schematic::create(new ReflectionMiddleware())))
             ->for($entry->arguments[0]->type);
-        $outcome = $binding->coerce(['kind' => 'text', 'body' => 'Hello']);
+        $outcome = $binding->coerce('Ada Lovelace');
         self::assertTrue($outcome->success);
-        self::assertInstanceOf(Fixtures\TextBlock::class, $outcome->value());
+        self::assertInstanceOf(Fixtures\AuthorName::class, $outcome->value());
     }
 }
