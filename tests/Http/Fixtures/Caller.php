@@ -4,18 +4,17 @@ declare(strict_types=1);
 
 namespace Neos\OpenApi\Tests\Http\Fixtures;
 
-use Neos\JsonSchema\Validation\Issue;
-use Neos\JsonSchema\Validation\IssueCode;
-use Neos\JsonSchema\Validation\Issues;
-use Neos\OpenApi\Binding\CoercionOutcome;
+use Neos\JsonSchema\ProvidesSchema;
+use Neos\JsonSchema\Schema;
+use Neos\Schematic\Discovery\AutoDiscoveringSchema;
 
 /**
- * The API's own notion of who is calling — handed over by an {@see \Neos\OpenApi\Http\AuthContextProvider}, never
- * coerced from the request, which is why its `coerce()` refuses outright.
+ * The API's own notion of who is calling — handed over by an {@see \Neos\OpenApi\Http\AuthContextProvider},
+ * never built from the request.
  */
-final readonly class Caller implements Coercible
+final readonly class Caller implements ProvidesSchema
 {
-    private function __construct(
+    public function __construct(
         public string $name,
     ) {}
 
@@ -24,15 +23,9 @@ final readonly class Caller implements Coercible
         return new self($name);
     }
 
-    public static function coerce(mixed $input): CoercionOutcome
+    public static function schema(): Schema
     {
-        return CoercionOutcome::failed(Issues::create(
-            Issue::create([], IssueCode::InvalidType, 'A caller never comes from the request'),
-        ));
-    }
-
-    public function serialize(): mixed
-    {
-        return $this->name;
+        static $schema = null;
+        return $schema ??= AutoDiscoveringSchema::analyze(self::class);
     }
 }

@@ -11,13 +11,11 @@
     "require": {
         "php": ">=8.4",
         "neos/jsonschema": "dev-main",
+        "neos/schematic": "dev-main",
         "psr/http-message": "^1 || ^2",
         "psr/http-server-handler": "^1",
         "psr/http-factory": "^1",
         "psr/container": "^1 || ^2"
-    },
-    "suggest": {
-        "neos/schematic": "To describe PHP types with attributes and coerce request data into them (Neos\\OpenApi\\Schematic)"
     },
     "repositories": [
         {
@@ -31,7 +29,6 @@
     ],
     "require-dev": {
         "roave/security-advisories": "dev-latest",
-        "neos/schematic": "dev-main",
         "phpstan/phpstan": "^2",
         "friendsofphp/php-cs-fixer": "^3",
         "phpunit/phpunit": "^10 || ^11 || ^12",

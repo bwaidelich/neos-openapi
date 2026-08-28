@@ -14,8 +14,7 @@ namespace Neos\OpenApi\Binding;
  * The two possibilities are one non-nullable member rather than two nullable ones, so "exactly one of them is
  * set" is a fact about the type rather than an invariant every reader has to trust.
  *
- * Resolving one of these to something that can render a schema and coerce a value is the job of a
- * {@see TypeBindingProvider}.
+ * Rendering a schema for one, or reading a value into it, is {@see TypeBinding}.
  */
 final readonly class TypeReference
 {

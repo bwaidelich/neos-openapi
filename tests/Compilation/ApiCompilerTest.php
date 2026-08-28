@@ -33,9 +33,8 @@ use Neos\OpenApi\Tests\Compilation\Fixtures\UnsecuredAuthContextApi;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The compiler is core, so it is tested against the {@see \Neos\OpenApi\Binding\TypeBindingProvider} port with no schema
- * engine behind it — which is what the architecture test enforces. `tests/Schematic` covers the same ground with
- * the real adapter.
+ * The compiler's own rules — what becomes a parameter, what becomes a response, and everything it refuses — over
+ * fixtures that own real schemas. `tests/Schematic` covers the same ground end to end, over a whole small API.
  */
 final class ApiCompilerTest extends TestCase
 {
@@ -43,7 +42,7 @@ final class ApiCompilerTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->compiler = new ApiCompiler(new StubTypeBindingProvider());
+        $this->compiler = new ApiCompiler();
     }
 
     private function definition(): ApiDefinition
@@ -443,7 +442,7 @@ final class ApiCompilerTest extends TestCase
 
         // `Caller` is absent on purpose: it is the #[AuthContext] argument, which is never part of the request's
         // published shape, so nothing ever asks for its schema
-        self::assertSame(['NewPost', 'Post', 'PostSlug', 'ProblemDocument'], array_keys($schemas));
+        self::assertSame(['NewPost', 'Post', 'PostSlug', 'PostTitle', 'ProblemDocument'], array_keys($schemas));
     }
 
     /**

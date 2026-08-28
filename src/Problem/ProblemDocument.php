@@ -58,6 +58,11 @@ final readonly class ProblemDocument implements JsonSerializable, ProvidesSchema
         return MediaTypeRange::fromString(self::CONTENT_TYPE);
     }
 
+    /**
+     * Deliberately open: RFC 9457 allows extension members, so `additionalProperties` stays unset rather than
+     * `false`. Nothing builds a ProblemDocument *from* this schema — it is what the document advertises and what
+     * the tests hold the emitted payload to — so the openness costs nothing.
+     */
     public static function schema(): JsonSchema
     {
         return ObjectSchema::create(

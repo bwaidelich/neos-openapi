@@ -7,12 +7,11 @@ namespace Neos\OpenApi\Tests\Schematic;
 use Neos\JsonSchema\ReferenceSchema;
 use Neos\JsonSchema\Validation\IssueCode;
 use Neos\OpenApi\Binding\BuiltinType;
-use Neos\OpenApi\Binding\TypeBindingProvider;
+use Neos\OpenApi\Binding\TypeBinding;
 use Neos\OpenApi\Binding\TypeReference;
 use Neos\OpenApi\Compilation\SchemaComponents;
+use Neos\OpenApi\Dispatch\ArgumentSource;
 use Neos\OpenApi\Exception\ComponentNameCollisionException;
-use Neos\OpenApi\Exception\UnsupportedTypeException;
-use Neos\OpenApi\Schematic\SchematicTypeBindingProvider;
 use Neos\OpenApi\Tests\Schematic\Fixtures\Author;
 use Neos\OpenApi\Tests\Schematic\Fixtures\AuthorName;
 use Neos\OpenApi\Tests\Schematic\Fixtures\AuthorNames;
@@ -21,24 +20,16 @@ use Neos\OpenApi\Tests\Schematic\Fixtures\Colliding\Rival;
 use Neos\OpenApi\Tests\Schematic\Fixtures\PostStatus;
 use Neos\OpenApi\Tests\Schematic\Fixtures\TextBlock;
 use Neos\OpenApi\Tests\Schematic\Fixtures\Undescribable;
-use Neos\Schematic\Attributes\ReflectionMiddleware;
-use Neos\Schematic\Schematic;
+use Neos\Schematic\SchemaNotProvided;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The `neos/schematic` adapter behind the TypeBinding port: schemas hoisted into components, request data coerced
- * into instances, and instances read back out — all from the one schema, which is what stops the published
- * document and the runtime from disagreeing.
+ * One {@see TypeBinding} per type: schemas hoisted into components, request data validated into instances, and
+ * instances read back out — all from the one schema, which is what stops the published document and the runtime
+ * from disagreeing.
  */
 final class TypeBindingTest extends TestCase
 {
-    private TypeBindingProvider $provider;
-
-    protected function setUp(): void
-    {
-        $this->provider = new SchematicTypeBindingProvider(Schematic::create(new ReflectionMiddleware()));
-    }
-
     /**
      * @return array<string, mixed>
      */
@@ -52,11 +43,11 @@ final class TypeBindingTest extends TestCase
 
     public function testABuiltinTypeBindsWithoutAComponentName(): void
     {
-        $binding = $this->provider->for(TypeReference::builtin(BuiltinType::string));
+        $type = TypeReference::builtin(BuiltinType::string);
         $components = SchemaComponents::create();
 
-        self::assertNull($binding->componentName());
-        self::assertSame(['type' => 'string'], $this->encode($binding->jsonSchema($components)));
+        self::assertNull(TypeBinding::componentName($type));
+        self::assertSame(['type' => 'string'], $this->encode(TypeBinding::jsonSchema($type, $components)));
         self::assertTrue($components->isEmpty());
     }
 
@@ -65,7 +56,7 @@ final class TypeBindingTest extends TestCase
         $components = SchemaComponents::create();
         $types = [];
         foreach (BuiltinType::cases() as $case) {
-            $types[$case->value] = $this->encode($this->provider->for(TypeReference::builtin($case))->jsonSchema($components))['type'];
+            $types[$case->value] = $this->encode(TypeBinding::jsonSchema(TypeReference::builtin($case), $components))['type'];
         }
 
         self::assertSame(
@@ -79,11 +70,11 @@ final class TypeBindingTest extends TestCase
      */
     public function testAValueObjectIsHoistedIntoAComponentAndReferencedAtTheUseSite(): void
     {
-        $binding = $this->provider->for(TypeReference::of(AuthorName::class));
+        $type = TypeReference::of(AuthorName::class);
         $components = SchemaComponents::create();
 
-        self::assertSame('AuthorName', $binding->componentName());
-        $atUseSite = $binding->jsonSchema($components);
+        self::assertSame('AuthorName', TypeBinding::componentName($type));
+        $atUseSite = TypeBinding::jsonSchema($type, $components);
 
         self::assertInstanceOf(ReferenceSchema::class, $atUseSite);
         self::assertSame(['$ref' => '#/components/schemas/AuthorName'], $this->encode($atUseSite));
@@ -96,7 +87,7 @@ final class TypeBindingTest extends TestCase
     public function testNestedTypesAreHoistedToo(): void
     {
         $components = SchemaComponents::create();
-        $this->provider->for(TypeReference::of(Author::class))->jsonSchema($components);
+        TypeBinding::jsonSchema(TypeReference::of(Author::class), $components);
 
         self::assertSame(['Author', 'AuthorName', 'PostCount'], array_keys($this->encode($components->toSchemaObjectMap())));
     }
@@ -104,7 +95,7 @@ final class TypeBindingTest extends TestCase
     public function testAShapeReferencesItsPropertiesRatherThanInliningThem(): void
     {
         $components = SchemaComponents::create();
-        $this->provider->for(TypeReference::of(Author::class))->jsonSchema($components);
+        TypeBinding::jsonSchema(TypeReference::of(Author::class), $components);
 
         $author = $this->encode($components->toSchemaObjectMap())['Author'];
         self::assertIsArray($author);
@@ -125,7 +116,7 @@ final class TypeBindingTest extends TestCase
     public function testATypeUsedTwiceBecomesOneComponent(): void
     {
         $components = SchemaComponents::create();
-        $this->provider->for(TypeReference::of(Collaboration::class))->jsonSchema($components);
+        TypeBinding::jsonSchema(TypeReference::of(Collaboration::class), $components);
 
         $schemas = $this->encode($components->toSchemaObjectMap());
         self::assertSame(['Author', 'AuthorName', 'Collaboration', 'PostCount', 'PostStatus'], array_keys($schemas));
@@ -145,7 +136,7 @@ final class TypeBindingTest extends TestCase
     public function testNullabilityWrapsTheReferenceRatherThanTheComponent(): void
     {
         $components = SchemaComponents::create();
-        $atUseSite = $this->provider->for(TypeReference::of(AuthorName::class, nullable: true))->jsonSchema($components);
+        $atUseSite = TypeBinding::jsonSchema(TypeReference::of(AuthorName::class, nullable: true), $components);
 
         self::assertSame(
             ['anyOf' => [['$ref' => '#/components/schemas/AuthorName'], ['type' => 'null']]],
@@ -159,7 +150,7 @@ final class TypeBindingTest extends TestCase
     public function testAnEnumBecomesAComponentWithItsCases(): void
     {
         $components = SchemaComponents::create();
-        $this->provider->for(TypeReference::of(PostStatus::class))->jsonSchema($components);
+        TypeBinding::jsonSchema(TypeReference::of(PostStatus::class), $components);
 
         self::assertSame(
             ['type' => 'string', 'enum' => ['draft', 'published']],
@@ -170,7 +161,7 @@ final class TypeBindingTest extends TestCase
     public function testAListReferencesItsItemType(): void
     {
         $components = SchemaComponents::create();
-        $this->provider->for(TypeReference::of(AuthorNames::class))->jsonSchema($components);
+        TypeBinding::jsonSchema(TypeReference::of(AuthorNames::class), $components);
 
         $list = $this->encode($components->toSchemaObjectMap())['AuthorNames'];
         self::assertIsArray($list);
@@ -181,8 +172,8 @@ final class TypeBindingTest extends TestCase
     public function testComponentsAreSortedSoTheDocumentDoesNotDependOnVisitOrder(): void
     {
         $first = SchemaComponents::create();
-        $this->provider->for(TypeReference::of(PostStatus::class))->jsonSchema($first);
-        $this->provider->for(TypeReference::of(AuthorName::class))->jsonSchema($first);
+        TypeBinding::jsonSchema(TypeReference::of(PostStatus::class), $first);
+        TypeBinding::jsonSchema(TypeReference::of(AuthorName::class), $first);
 
         self::assertSame(['AuthorName', 'PostStatus'], array_keys($this->encode($first->toSchemaObjectMap())));
     }
@@ -194,23 +185,22 @@ final class TypeBindingTest extends TestCase
     public function testTwoClassesClaimingOneComponentNameFailLoudly(): void
     {
         $components = SchemaComponents::create();
-        $this->provider->for(TypeReference::of(AuthorName::class))->jsonSchema($components);
+        TypeBinding::jsonSchema(TypeReference::of(AuthorName::class), $components);
 
         $this->expectException(ComponentNameCollisionException::class);
-        $this->provider->for(TypeReference::of(Rival::class))->jsonSchema($components);
+        TypeBinding::jsonSchema(TypeReference::of(Rival::class), $components);
     }
 
-    public function testAnUndescribableTypeIsReportedAsACoreException(): void
+    public function testATypeOwningNoSchemaIsRefused(): void
     {
-        $this->expectException(UnsupportedTypeException::class);
-        $this->expectExceptionMessageMatches('/Cannot describe the type "' . preg_quote(Undescribable::class, '/') . '"/');
-        $this->provider->for(TypeReference::of(Undescribable::class));
+        $this->expectException(SchemaNotProvided::class);
+        $this->expectExceptionMessageMatches('/' . preg_quote(Undescribable::class, '/') . '" provides no schema/');
+        TypeBinding::jsonSchema(TypeReference::of(Undescribable::class), SchemaComponents::create());
     }
 
     public function testCoercionTurnsRequestDataIntoAnInstance(): void
     {
-        $outcome = $this->provider->for(TypeReference::of(Author::class))
-            ->coerce(['name' => 'Ada Lovelace', 'posts' => 3]);
+        $outcome = TypeBinding::coerce(TypeReference::of(Author::class), ['name' => 'Ada Lovelace', 'posts' => 3]);
 
         self::assertTrue($outcome->success);
         $author = $outcome->value();
@@ -220,22 +210,28 @@ final class TypeBindingTest extends TestCase
     }
 
     /**
-     * A query-string value arrives as a string; the engine's normalization is what makes `?posts=3` work.
+     * A query-string value arrives as a string, so that binding site reads scalars leniently and `?posts=3`
+     * works. A JSON body carries real types, so the same input is a string there and is rejected as one — the
+     * source is what decides, not the value.
      */
-    public function testCoercionNormalizesANumericStringForAnIntegerType(): void
+    public function testHowStrictlyAScalarIsReadFollowsWhereItCameFrom(): void
     {
-        $outcome = $this->provider->for(TypeReference::of(Author::class))
-            ->coerce(['name' => 'Ada', 'posts' => '3']);
+        $type = TypeReference::of(Author::class);
 
-        self::assertTrue($outcome->success);
-        $author = $outcome->value();
+        $fromQuery = TypeBinding::coerce($type, ['name' => 'Ada', 'posts' => '3'], ArgumentSource::query);
+        self::assertTrue($fromQuery->success);
+        $author = $fromQuery->value();
         self::assertInstanceOf(Author::class, $author);
         self::assertSame(3, $author->posts->value);
+
+        $fromBody = TypeBinding::coerce($type, ['name' => 'Ada', 'posts' => '3'], ArgumentSource::body);
+        self::assertFalse($fromBody->success);
+        self::assertSame(IssueCode::InvalidType->value, $fromBody->issues?->toArray()[0]->code);
     }
 
     public function testAFailedCoercionCarriesIssuesRatherThanThrowing(): void
     {
-        $outcome = $this->provider->for(TypeReference::of(Author::class))->coerce(['name' => '', 'posts' => 3]);
+        $outcome = TypeBinding::coerce(TypeReference::of(Author::class), ['name' => '', 'posts' => 3]);
 
         self::assertFalse($outcome->success);
         self::assertNotNull($outcome->issues);
@@ -246,7 +242,7 @@ final class TypeBindingTest extends TestCase
 
     public function testReadingTheValueOfAFailedCoercionThrows(): void
     {
-        $outcome = $this->provider->for(TypeReference::of(AuthorName::class))->coerce('');
+        $outcome = TypeBinding::coerce(TypeReference::of(AuthorName::class), '');
 
         $this->expectException(\LogicException::class);
         $value = $outcome->value();
@@ -255,7 +251,7 @@ final class TypeBindingTest extends TestCase
 
     public function testANullableBindingAcceptsNull(): void
     {
-        $outcome = $this->provider->for(TypeReference::of(AuthorName::class, nullable: true))->coerce(null);
+        $outcome = TypeBinding::coerce(TypeReference::of(AuthorName::class, nullable: true), null);
 
         self::assertTrue($outcome->success);
         self::assertNull($outcome->value());
@@ -263,10 +259,10 @@ final class TypeBindingTest extends TestCase
 
     public function testSerializationReadsAnInstanceBackIntoPrimitives(): void
     {
-        $binding = $this->provider->for(TypeReference::of(Author::class));
-        $author = $binding->coerce(['name' => 'Ada', 'posts' => 3])->value();
+        $type = TypeReference::of(Author::class);
+        $author = TypeBinding::coerce($type, ['name' => 'Ada', 'posts' => 3])->value();
 
-        self::assertSame(['name' => 'Ada', 'posts' => 3, 'pseudonym' => null], $binding->serialize($author));
+        self::assertSame(['name' => 'Ada', 'posts' => 3, 'pseudonym' => null], TypeBinding::serialize($author));
     }
 
     /**
@@ -274,12 +270,12 @@ final class TypeBindingTest extends TestCase
      */
     public function testSerializedOutputValidatesAgainstTheHoistedSchema(): void
     {
-        $binding = $this->provider->for(TypeReference::of(TextBlock::class));
+        $type = TypeReference::of(TextBlock::class);
         $components = SchemaComponents::create();
-        $binding->jsonSchema($components);
+        TypeBinding::jsonSchema($type, $components);
 
-        $block = $binding->coerce(['body' => 'Hello'])->value();
-        $primitives = $binding->serialize($block);
+        $block = TypeBinding::coerce($type, ['body' => 'Hello'])->value();
+        $primitives = TypeBinding::serialize($block);
 
         $componentSchema = $components->toSchemaObjectMap()->get('TextBlock');
         self::assertNotNull($componentSchema);
@@ -290,18 +286,18 @@ final class TypeBindingTest extends TestCase
         self::assertTrue($authorName->validate($primitives['body'])->valid);
     }
 
-    public function testTheSameProviderIsUsedForBothDescribingAndCoercing(): void
+    public function testTheSameSchemaDescribesAndValidates(): void
     {
-        $binding = $this->provider->for(TypeReference::of(AuthorName::class));
+        $type = TypeReference::of(AuthorName::class);
         $components = SchemaComponents::create();
-        $binding->jsonSchema($components);
+        TypeBinding::jsonSchema($type, $components);
 
         $schema = $components->toSchemaObjectMap()->get('AuthorName');
         self::assertNotNull($schema);
         // the advertised minLength is the one the runtime enforces
         self::assertTrue($schema->validate('Ada')->valid);
         self::assertFalse($schema->validate('')->valid);
-        self::assertFalse($binding->coerce('')->success);
-        self::assertTrue($binding->coerce('Ada')->success);
+        self::assertFalse(TypeBinding::coerce($type, '')->success);
+        self::assertTrue(TypeBinding::coerce($type, 'Ada')->success);
     }
 }

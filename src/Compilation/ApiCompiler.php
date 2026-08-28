@@ -10,7 +10,7 @@ use Neos\OpenApi\Attributes\Operation;
 use Neos\OpenApi\Attributes\Parameter;
 use Neos\OpenApi\Attributes\RequestBody;
 use Neos\OpenApi\Binding\BuiltinType;
-use Neos\OpenApi\Binding\TypeBindingProvider;
+use Neos\OpenApi\Binding\TypeBinding;
 use Neos\OpenApi\Binding\TypeReference;
 use Neos\OpenApi\Dispatch\ArgumentBinding;
 use Neos\OpenApi\Dispatch\ArgumentSource;
@@ -56,10 +56,6 @@ use ReflectionUnionType;
  */
 final readonly class ApiCompiler
 {
-    public function __construct(
-        private TypeBindingProvider $bindings,
-    ) {}
-
     public function compile(ApiDefinition $api): CompiledApi
     {
         $components = SchemaComponents::create();
@@ -161,7 +157,7 @@ final readonly class ApiCompiler
                 $requestBody = new RequestBodyObject(
                     content: MediaTypeObjectMap::create()->with(
                         MediaTypeRange::fromString($classified->contentType ?? 'application/json'),
-                        new MediaTypeObject(schema: $this->bindings->for($classified->binding->type)->jsonSchema($components)),
+                        new MediaTypeObject(schema: TypeBinding::jsonSchema($classified->binding->type, $components)),
                     ),
                     description: $classified->description,
                     required: $classified->binding->required,
@@ -174,7 +170,7 @@ final readonly class ApiCompiler
                 description: $classified->description,
                 required: $classified->binding->required ?: null,
                 deprecated: $classified->deprecated,
-                schema: $this->bindings->for($classified->binding->type)->jsonSchema($components),
+                schema: TypeBinding::jsonSchema($classified->binding->type, $components),
             );
         }
 
@@ -414,7 +410,7 @@ final readonly class ApiCompiler
             $responses = $responses->with(HttpStatusCode::fromInteger(200), new ResponseObject(
                 description: 'OK',
                 content: MediaTypeObjectMap::json(new MediaTypeObject(
-                    schema: $this->bindings->for($branches['success'])->jsonSchema($components),
+                    schema: TypeBinding::jsonSchema($branches['success'], $components),
                 )),
             ));
         }
@@ -437,7 +433,7 @@ final readonly class ApiCompiler
             $contentType = $responseClassName::contentType() ?? MediaTypeRange::fromString('application/json');
             $content = MediaTypeObjectMap::create()->with(
                 $contentType,
-                new MediaTypeObject(schema: $this->bindings->for($bodyType)->jsonSchema($components)),
+                new MediaTypeObject(schema: TypeBinding::jsonSchema($bodyType, $components)),
             );
         }
         return new ResponseObject(
@@ -450,7 +446,7 @@ final readonly class ApiCompiler
 
     /**
      * The declared headers of a response, each with the schema of the type it declared — resolved here because
-     * this is where the {@see TypeBindingProvider} and the {@see SchemaComponents} are.
+     * this is where the {@see TypeBinding}s and the {@see SchemaComponents} are.
      *
      * @param class-string<ApiResponse> $responseClassName
      */
@@ -469,7 +465,7 @@ final readonly class ApiCompiler
                 description: $header->description,
                 required: $header->required ?: null,
                 deprecated: $header->deprecated ?: null,
-                schema: $this->bindings->for($header->type)->jsonSchema($components),
+                schema: TypeBinding::jsonSchema($header->type, $components),
             ));
         }
         return $headers;

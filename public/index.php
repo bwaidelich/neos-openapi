@@ -8,6 +8,9 @@ require_once dirname(__DIR__, 1) . '/vendor/autoload.php';
 
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\ServerRequest;
+use Neos\JsonSchema\ProvidesSchema;
+use Neos\JsonSchema\Schema;
+use Neos\JsonSchema\StringSchema;
 use Neos\OpenApi\ApiDefinition;
 use Neos\OpenApi\Attributes\AuthContext;
 use Neos\OpenApi\Attributes\Operation;
@@ -18,7 +21,6 @@ use Neos\OpenApi\Http\AuthContextProvider;
 use Neos\OpenApi\Support\FixedContainer;
 use Neos\OpenApi\Http\RequestHandler;
 use Neos\OpenApi\Response\ApiResponse;
-use Neos\OpenApi\Schematic\SchematicTypeBindingProvider;
 use Neos\OpenApi\Spec\InfoObject;
 use Neos\OpenApi\Spec\SecurityRequirementObject;
 use Neos\OpenApi\Spec\SecuritySchemeObject;
@@ -27,25 +29,38 @@ use Neos\OpenApi\Spec\ServerObject;
 use Neos\OpenApi\Spec\ServerObjects;
 use Neos\OpenApi\Support\HttpStatusCode;
 use Neos\OpenApi\Support\MediaTypeRange;
-use Neos\Schematic\Attributes\ReflectionMiddleware;
-use Neos\Schematic\Attributes\StringBased;
+use Neos\Schematic\Discovery\AutoDiscoveringSchema;
 use Neos\Schematic\Schematic;
 use Psr\Http\Message\ServerRequestInterface;
 
-#[StringBased(minLength: 1, maxLength: 100, pattern: '^[a-z0-9-]+$')]
-final readonly class Slug
+final readonly class Slug implements ProvidesSchema
 {
     private function __construct(public string $value) {}
+
+    public static function fromString(string $value): self
+    {
+        return Schematic::instantiate(self::class, $value);
+    }
+
+    public static function schema(): Schema
+    {
+        static $schema = null;
+        return $schema ??= StringSchema::create(minLength: 1, maxLength: 100, pattern: '^[a-z0-9-]+$');
+    }
 }
 
-final readonly class Post {
-
+final readonly class Post implements ProvidesSchema
+{
     public function __construct(
         public Slug $slug,
         public string $author,
         public string $text,
-    )
+    ) {}
+
+    public static function schema(): Schema
     {
+        static $schema = AutoDiscoveringSchema::analyze(self::class);
+        return $schema;
     }
 }
 
@@ -102,9 +117,18 @@ final class AccountApi
     }
 }
 
-final readonly class Caller
+final readonly class Caller implements ProvidesSchema
 {
-    public function __construct(public string $name) {}
+    public function __construct(
+        public string $name,
+        public string $role,
+    ) {}
+
+    public static function schema(): Schema
+    {
+        static $schema = null;
+        return $schema ??= AutoDiscoveringSchema::analyze(self::class);
+    }
 }
 
 $callers = new class implements AuthContextProvider {
@@ -112,7 +136,7 @@ $callers = new class implements AuthContextProvider {
     {
         $authorizationHeader = $request->getHeaderLine('Authorization');
         if ($authorizationHeader === 'Basic dXNlcjpwYXNzd29yZA==') {
-            return new Caller('user');
+            return new Caller('user', 'editor');
         }
         return null;
     }
@@ -130,13 +154,11 @@ $api = ApiDefinition::create(
     ->withOperationsFrom(PostApi::class, tag: 'Posts')
     ->withOperationsFrom(AccountApi::class, tag: 'Accounts');
 
-$provider = new SchematicTypeBindingProvider(Schematic::create(new ReflectionMiddleware()));
-$compiledApi = (new ApiCompiler($provider))->compile($api);
+$compiledApi = (new ApiCompiler())->compile($api);
 
 $factory = new HttpFactory(); // any PSR-17 response + stream factory
 $handler = new RequestHandler(
     $compiledApi,
-    $provider,
     new FixedContainer(new PostApi(), new AccountApi()),
     $factory,
     $factory,

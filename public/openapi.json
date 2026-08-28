@@ -6,11 +6,11 @@
   },
   "servers": [
     {
-      "url": "http://localhost:8080"
+      "url": "http:\/\/localhost:8080"
     }
   ],
   "paths": {
-    "/posts/{slug}": {
+    "\/posts\/{slug}": {
       "get": {
         "tags": [
           "Posts"
@@ -23,7 +23,21 @@
             "in": "path",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/Slug"
+              "$ref": "#\/components\/schemas\/Slug"
+            }
+          },
+          {
+            "name": "foo",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           }
         ],
@@ -31,19 +45,22 @@
           "200": {
             "description": "OK",
             "content": {
-              "application/json": {
+              "application\/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Post"
+                  "$ref": "#\/components\/schemas\/Post"
                 }
               }
             }
           },
+          "305": {
+            "description": "No such post"
+          },
           "400": {
             "description": "The request could not be understood",
             "content": {
-              "application/problem+json": {
+              "application\/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDocument"
+                  "$ref": "#\/components\/schemas\/ProblemDocument"
                 }
               }
             }
@@ -51,7 +68,7 @@
         }
       }
     },
-    "/posts": {
+    "\/posts": {
       "post": {
         "tags": [
           "Posts"
@@ -59,9 +76,9 @@
         "operationId": "createPost",
         "requestBody": {
           "content": {
-            "application/json": {
+            "application\/json": {
               "schema": {
-                "$ref": "#/components/schemas/Slug"
+                "$ref": "#\/components\/schemas\/Slug"
               }
             }
           },
@@ -71,9 +88,9 @@
           "200": {
             "description": "OK",
             "content": {
-              "application/json": {
+              "application\/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Slug"
+                  "$ref": "#\/components\/schemas\/Slug"
                 }
               }
             }
@@ -81,9 +98,9 @@
           "400": {
             "description": "The request could not be understood",
             "content": {
-              "application/problem+json": {
+              "application\/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDocument"
+                  "$ref": "#\/components\/schemas\/ProblemDocument"
                 }
               }
             }
@@ -91,7 +108,7 @@
         }
       }
     },
-    "/me": {
+    "\/me": {
       "get": {
         "tags": [
           "Accounts"
@@ -101,9 +118,9 @@
           "200": {
             "description": "OK",
             "content": {
-              "application/json": {
+              "application\/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Caller"
+                  "$ref": "#\/components\/schemas\/Caller"
                 }
               }
             }
@@ -111,19 +128,18 @@
           "401": {
             "description": "The request was not authenticated",
             "content": {
-              "application/problem+json": {
+              "application\/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProblemDocument"
+                  "$ref": "#\/components\/schemas\/ProblemDocument"
                 }
               }
             }
           }
         },
         "security": [
-          [
-            "bearerAuth",
-            "basicAuth"
-          ]
+          {
+            "basicAuth": []
+          }
         ]
       }
     }
@@ -135,18 +151,22 @@
         "properties": {
           "name": {
             "type": "string"
+          },
+          "role": {
+            "type": "string"
           }
         },
         "additionalProperties": false,
         "required": [
-          "name"
+          "name",
+          "role"
         ]
       },
       "Post": {
         "type": "object",
         "properties": {
           "slug": {
-            "$ref": "#/components/schemas/Slug"
+            "$ref": "#\/components\/schemas\/Slug"
           },
           "author": {
             "type": "string"

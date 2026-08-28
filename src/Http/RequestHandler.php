@@ -8,7 +8,7 @@ use JsonException;
 use Neos\JsonSchema\Validation\Issue;
 use Neos\JsonSchema\Validation\IssueCode;
 use Neos\JsonSchema\Validation\Issues;
-use Neos\OpenApi\Binding\TypeBindingProvider;
+use Neos\OpenApi\Binding\TypeBinding;
 use Neos\OpenApi\Compilation\CompiledApi;
 use Neos\OpenApi\Dispatch\ArgumentBinding;
 use Neos\OpenApi\Dispatch\ArgumentSource;
@@ -35,7 +35,7 @@ use Psr\Http\Server\RequestHandlerInterface;
  *
  * **No reflection happens here.** The document routes the request to a path template, the Dispatch Table says
  * which method of which Api Class answers it and where each of its arguments comes from, and the {@see
- * TypeBindingProvider} — the same one that described those types when the document was generated — turns request
+ * TypeBinding} — built from the same schemas that described those types when the document was generated — turns request
  * data into them and the result back into a payload. That shared provider is the whole reason a response cannot
  * contradict the document that advertised it.
  *
@@ -53,7 +53,6 @@ final readonly class RequestHandler implements RequestHandlerInterface
 
     public function __construct(
         private CompiledApi $api,
-        private TypeBindingProvider $bindings,
         private ContainerInterface $apiClasses,
         private ResponseFactoryInterface $responseFactory,
         private StreamFactoryInterface $streamFactory,
@@ -173,7 +172,7 @@ final readonly class RequestHandler implements RequestHandlerInterface
                         'rejection' => $this->problem(400, 'Bad Request', 'The request body is not valid JSON: ' . $exception->getMessage()),
                     ];
                 }
-                $outcome = $this->bindings->for($binding->type)->coerce($decoded);
+                $outcome = TypeBinding::coerce($binding->type, $decoded);
                 if (!$outcome->success) {
                     $issues = $issues->merge(self::prefixed($outcome->issues, ['body']));
                     continue;
@@ -193,7 +192,7 @@ final readonly class RequestHandler implements RequestHandlerInterface
                 // absent and optional: leave it out, so the method's own default value applies
                 continue;
             }
-            $outcome = $this->bindings->for($binding->type)->coerce($raw);
+            $outcome = TypeBinding::coerce($binding->type, $raw, $binding->source);
             if (!$outcome->success) {
                 $issues = $issues->merge(self::prefixed($outcome->issues, [$binding->source->value, $binding->wireName]));
                 continue;
@@ -250,7 +249,7 @@ final readonly class RequestHandler implements RequestHandlerInterface
                 $response = $this->json(
                     $result::statusCode()->value,
                     $contentType->value,
-                    $this->bindings->for($bodyType)->serialize($result->body()),
+                    TypeBinding::serialize($result->body()),
                 );
             }
             return $result instanceof ApiResponseWithHeaders ? $this->withDeclaredHeaders($response, $result) : $response;
@@ -260,7 +259,7 @@ final readonly class RequestHandler implements RequestHandlerInterface
             return $this->responseFactory->createResponse(204);
         }
         // serialized through the binding the document's schema came from, never json_encode'd raw
-        return $this->json(200, 'application/json', $this->bindings->for($entry->successType)->serialize($result));
+        return $this->json(200, 'application/json', TypeBinding::serialize($result));
     }
 
     /**
@@ -289,7 +288,7 @@ final readonly class RequestHandler implements RequestHandlerInterface
             $value = self::headerValueOf($values, $header->name);
             // an empty *list* is a repeated header repeated no times, which is the same as not sending it — and
             // is not the same as an empty string, which is a value and does go out
-            $field = $value === null ? [] : self::fieldValue($this->bindings->for($header->type)->serialize($value), $header, $result);
+            $field = $value === null ? [] : self::fieldValue(TypeBinding::serialize($value), $header, $result);
             if ($field === []) {
                 if ($header->required) {
                     throw new \LogicException(sprintf(

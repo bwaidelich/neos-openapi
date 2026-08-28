@@ -47,7 +47,7 @@ final class RequestHandlerTest extends TestCase
      */
     private function compile(string $title): CompiledApi
     {
-        return (new ApiCompiler(new FixtureTypeBindingProvider()))->compile(
+        return (new ApiCompiler())->compile(
             ApiDefinition::create(
                 info: new InfoObject(title: $title, version: '1.0.0'),
                 securitySchemes: SecuritySchemeOrReferenceObjectMap::create()
@@ -70,7 +70,6 @@ final class RequestHandlerTest extends TestCase
         };
         return new RequestHandler(
             $this->compiled,
-            new FixtureTypeBindingProvider(),
             new FixedContainer($this->api),
             $factory,
             $factory,
@@ -197,7 +196,7 @@ final class RequestHandlerTest extends TestCase
         self::assertSame(400, $response->getStatusCode());
         self::assertSame('application/problem+json', $response->getHeaderLine('Content-Type'));
         self::assertSame(
-            [['code' => 'invalid_pattern', 'message' => 'A todo id consists of lowercase letters, digits and dashes', 'pointer' => '/path/id']],
+            [['code' => 'invalid_pattern', 'message' => 'Value does not match the pattern "^[a-z0-9-]+$"', 'pointer' => '/path/id']],
             $this->issues($response),
         );
     }
@@ -231,7 +230,7 @@ final class RequestHandlerTest extends TestCase
         $response = $this->handle('POST', '/todos', ['Authorization' => 'Bearer t'], '{"title":"Ship it"}');
 
         self::assertSame(201, $response->getStatusCode());
-        self::assertEquals(NewTodo::coerce(['title' => 'Ship it'])->value(), $this->api->lastArguments['todo']);
+        self::assertEquals(new NewTodo('Ship it'), $this->api->lastArguments['todo']);
         self::assertSame($this->caller, $this->api->lastArguments['caller']);
         self::assertSame(['id' => 'new', 'title' => 'Ship it', 'done' => false], $this->decoded($response));
     }
@@ -364,7 +363,7 @@ final class RequestHandlerTest extends TestCase
                 return $id === TodoApi::class;
             }
         };
-        $handler = new RequestHandler($this->compiled, new FixtureTypeBindingProvider(), $resolver, $factory, $factory);
+        $handler = new RequestHandler($this->compiled, $resolver, $factory, $factory);
 
         $handler->handle(new ServerRequest('GET', '/todos/one'));
         $handler->handle(new ServerRequest('GET', '/todos/two'));
@@ -423,10 +422,10 @@ final class RequestHandlerTest extends TestCase
     {
         $factory = new HttpFactory();
         $api = new BrokenHeaderApi();
-        $compiled = (new ApiCompiler(new FixtureTypeBindingProvider()))->compile(
+        $compiled = (new ApiCompiler())->compile(
             ApiDefinition::create(info: new InfoObject(title: 'Broken', version: '1.0.0'))->withOperationsFrom(BrokenHeaderApi::class),
         );
-        $handler = new RequestHandler($compiled, new FixtureTypeBindingProvider(), new FixedContainer($api), $factory, $factory);
+        $handler = new RequestHandler($compiled, new FixedContainer($api), $factory, $factory);
 
         $this->expectException(\LogicException::class);
         $this->expectExceptionCode($code);
@@ -438,7 +437,6 @@ final class RequestHandlerTest extends TestCase
         $factory = new HttpFactory();
         $handler = new RequestHandler(
             $this->compiled,
-            new FixtureTypeBindingProvider(),
             new FixedContainer($this->api),
             $factory,
             $factory,

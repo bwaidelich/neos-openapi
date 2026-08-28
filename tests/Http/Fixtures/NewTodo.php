@@ -4,34 +4,34 @@ declare(strict_types=1);
 
 namespace Neos\OpenApi\Tests\Http\Fixtures;
 
-use Neos\JsonSchema\Validation\Issue;
-use Neos\JsonSchema\Validation\IssueCode;
-use Neos\JsonSchema\Validation\Issues;
-use Neos\OpenApi\Binding\CoercionOutcome;
+use Neos\JsonSchema\BooleanSchema;
+use Neos\JsonSchema\ObjectSchema;
+use Neos\JsonSchema\ProvidesSchema;
+use Neos\JsonSchema\Schema;
+use Neos\JsonSchema\StringSchema;
+use Neos\JsonSchema\Support\ObjectProperties;
 
-final readonly class NewTodo implements Coercible
+/**
+ * Two properties, so it is a *shape* rather than a class that is one string: a body arrives as
+ * `{"title": …}`, and an issue inside it is located at `title`.
+ */
+final readonly class NewTodo implements ProvidesSchema
 {
-    private function __construct(
+    public function __construct(
         public string $title,
+        public bool $done = false,
     ) {}
 
-    public static function coerce(mixed $input): CoercionOutcome
+    public static function schema(): Schema
     {
-        if (!is_array($input)) {
-            return CoercionOutcome::failed(Issues::create(Issue::create([], IssueCode::InvalidType, 'Not an object')));
-        }
-        $title = $input['title'] ?? null;
-        if (!is_string($title) || $title === '') {
-            // located at "title", so the handler's prefixing is observable: it becomes "/body/title"
-            return CoercionOutcome::failed(Issues::create(
-                Issue::create(['title'], IssueCode::Required, 'A todo needs a title'),
-            ));
-        }
-        return CoercionOutcome::ok(new self($title));
-    }
-
-    public function serialize(): mixed
-    {
-        return ['title' => $this->title];
+        static $schema = null;
+        return $schema ??= ObjectSchema::create(
+            properties: ObjectProperties::create(
+                title: StringSchema::create(minLength: 1),
+                done: BooleanSchema::create(),
+            ),
+            additionalProperties: false,
+            required: ['title'],
+        );
     }
 }

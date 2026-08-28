@@ -27,17 +27,27 @@ use Neos\OpenApi\ApiDefinition;
 use Neos\OpenApi\Attributes\Operation;
 use Neos\OpenApi\Attributes\RequestBody;
 use Neos\OpenApi\Spec\InfoObject;
-use Neos\OpenApi\Schematic\SchematicTypeBindingProvider;
 use Neos\OpenApi\Support\HttpMethod;
 use Neos\OpenApi\Support\RelativePath;
-use Neos\Schematic\Attributes\ReflectionMiddleware;
-use Neos\Schematic\Attributes\StringBased;
+use Neos\JsonSchema\ProvidesSchema;
+use Neos\JsonSchema\Schema;
+use Neos\JsonSchema\StringSchema;
 use Neos\Schematic\Schematic;
 
-#[StringBased(minLength: 1, maxLength: 100, pattern: '^[a-z0-9-]+$')]
-final readonly class Slug
+final readonly class Slug implements ProvidesSchema
 {
     private function __construct(public string $value) {}
+
+    public static function fromString(string $value): self
+    {
+        return Schematic::instantiate(self::class, $value, static fn(string $v): self => new self($v));
+    }
+
+    public static function schema(): Schema
+    {
+        static $schema = null;
+        return $schema ??= StringSchema::create(minLength: 1, maxLength: 100, pattern: '^[a-z0-9-]+$');
+    }
 }
 
 final class PostApi
@@ -58,8 +68,7 @@ final class PostApi
 $api = ApiDefinition::create(info: new InfoObject(title: 'Blog', version: '1.0.0'))
     ->withOperationsFrom(PostApi::class, tag: 'Posts');
 
-$provider = new SchematicTypeBindingProvider(Schematic::create(new ReflectionMiddleware()));
-$compiler = new ApiCompiler($provider);
+$compiler = new ApiCompiler();
 $compiled = $compiler->compile($api);
 ```
 
@@ -102,12 +111,24 @@ it, it is left out of the call and the method's own default applies.
 // ...
 use Neos\OpenApi\Attributes\Parameter;
 use Neos\OpenApi\Support\ParameterLocation;
-use Neos\Schematic\Attributes\IntegerBased;
+use Neos\JsonSchema\IntegerSchema;
+use Neos\JsonSchema\ProvidesSchema as ProvidesJsonSchema;
+use Neos\JsonSchema\Schema as JsonSchema;
 
-#[IntegerBased(minimum: 1, maximum: 100)]
-final readonly class Limit
+final readonly class Limit implements ProvidesJsonSchema
 {
     private function __construct(public int $value) {}
+
+    public static function fromInteger(int $value): self
+    {
+        return \Neos\Schematic\Schematic::instantiate(self::class, $value, static fn(int $v): self => new self($v));
+    }
+
+    public static function schema(): JsonSchema
+    {
+        static $schema = null;
+        return $schema ??= IntegerSchema::create(minimum: 1, maximum: 100);
+    }
 }
 
 final class SearchApi
@@ -317,16 +338,28 @@ declares and passes whatever comes back to the `#[AuthContext]` argument, as you
 
 ```php
 // ...
+use Neos\JsonSchema\ProvidesSchema;
+use Neos\JsonSchema\Schema;
 use Neos\OpenApi\Attributes\AuthContext;
 use Neos\OpenApi\Http\AuthContextProvider;
+use Neos\Schematic\Discovery\AutoDiscoveringSchema;
 use Neos\OpenApi\Spec\SecurityRequirementObject;
 use Neos\OpenApi\Spec\SecuritySchemeObject;
 use Neos\OpenApi\Spec\SecuritySchemeOrReferenceObjectMap;
 use Psr\Http\Message\ServerRequestInterface;
 
-final readonly class Caller
+final readonly class Caller implements ProvidesSchema
 {
-    public function __construct(public string $name) {}
+    public function __construct(
+        public string $name,
+        public string $role,
+    ) {}
+
+    public static function schema(): Schema
+    {
+        static $schema = null;
+        return $schema ??= AutoDiscoveringSchema::analyze(self::class);
+    }
 }
 
 final class AccountApi
@@ -341,7 +374,7 @@ final class AccountApi
 $callers = new class implements AuthContextProvider {
     public function authContextFor(ServerRequestInterface $request, SecurityRequirementObject $requirement): object|null
     {
-        return $request->getHeaderLine('Authorization') === 'Bearer secret' ? new Caller('ada') : null;
+        return $request->getHeaderLine('Authorization') === 'Bearer secret' ? new Caller('ada', 'editor') : null;
     }
 };
 
@@ -453,8 +486,9 @@ try {
 ## Serving it
 
 The other half of a compilation is a Dispatch Table, and `RequestHandler` is what consumes it — a PSR-15 handler
-over any PSR-7/PSR-17 implementation. Give it the compilation, the *same* `TypeBindingProvider` the document was
-generated with, and a PSR-11 container its Api Classes can be read out of:
+over any PSR-7/PSR-17 implementation. Give it the compilation and a PSR-11 container its Api Classes can be read
+out of — the schemas it validates against are the ones the document was generated from, because both come from
+the types themselves:
 
 ```php
 // ...
@@ -466,7 +500,6 @@ use Neos\OpenApi\Http\RequestHandler;
 $factory = new HttpFactory(); // any PSR-17 response + stream factory
 $handler = new RequestHandler(
     $compiler->compile($blog),
-    $provider,
     new FixedContainer(new PostApi(), new LookupApi(), new DraftApi(), new AccountApi()),
     $factory,
     $factory,
@@ -505,7 +538,7 @@ assert($challenged->getHeaderLine('WWW-Authenticate') === 'Bearer');
 
 // and with them, the caller reaches the method as its own type
 $me = $handler->handle(new ServerRequest('GET', '/me', ['Authorization' => 'Bearer secret']));
-assert((string) $me->getBody() === '{"name":"ada"}');
+assert((string) $me->getBody() === '{"name":"ada","role":"editor"}');
 
 // the headers a response declared are on the wire, written through the bindings that described them
 $created = $handler->handle(new ServerRequest('PUT', '/drafts/hello-world'));
@@ -599,43 +632,61 @@ A schema anywhere in the document is a `Neos\JsonSchema\Schema` — not a replic
 
 ## Describing PHP types
 
-The document above was built by hand. To *derive* schemas from PHP types, this package talks to one small port —
-`TypeBindingProvider` — and `neos/schematic` is what sits behind it:
+The document above was built by hand. To *derive* schemas from PHP types, this package uses `neos/schematic`
+outright: a class owns its schema by implementing `Neos\JsonSchema\ProvidesSchema`, and `TypeBinding` is what
+this package asks about one type:
 
 ```php
-use Neos\OpenApi\Compilation\SchemaComponents;
-use Neos\OpenApi\Schematic\SchematicTypeBindingProvider;
+use Neos\JsonSchema\ProvidesSchema;
+use Neos\OpenApi\Binding\TypeBinding;
 use Neos\OpenApi\Binding\TypeReference;
-use Neos\Schematic\Attributes\ReflectionMiddleware;
-use Neos\Schematic\Attributes\StringBased;
+use Neos\OpenApi\Compilation\SchemaComponents;
+use Neos\JsonSchema\Schema;
+use Neos\JsonSchema\StringSchema;
+use Neos\Schematic\Discovery\AutoDiscoveringSchema;
 use Neos\Schematic\Schematic;
 
-#[StringBased(minLength: 1, maxLength: 200)]
-final readonly class AuthorName
+final readonly class AuthorName implements ProvidesSchema
 {
     private function __construct(public string $value) {}
+
+    public static function fromString(string $value): self
+    {
+        return Schematic::instantiate(self::class, $value, static fn(string $v): self => new self($v));
+    }
+
+    public static function schema(): Schema
+    {
+        static $schema = null;
+        return $schema ??= StringSchema::create(minLength: 1, maxLength: 200);
+    }
 }
 
-final readonly class Author
+final readonly class Author implements ProvidesSchema
 {
-    private function __construct(
+    public function __construct(
         public AuthorName $name,
         public AuthorName|null $pseudonym = null,
     ) {}
+
+    public static function schema(): Schema
+    {
+        static $schema = null;
+        return $schema ??= AutoDiscoveringSchema::analyze(self::class);
+    }
 }
 
-$provider = new SchematicTypeBindingProvider(Schematic::create(new ReflectionMiddleware()));
-$binding = $provider->for(TypeReference::of(Author::class));
+$author = TypeReference::of(Author::class);
 ```
 
-A binding answers everything this package ever needs to know about a type. Asking it for a schema **hoists** every
-named type into `#/components/schemas` and hands back a `$ref` to put at the use site — so a type used by three
-operations is one entry pointed at three times, and the document says "these are the same type":
+`TypeBinding` answers everything this package ever needs to know about a type. Asking it for a schema **hoists**
+every named type into `#/components/schemas` and hands back a `$ref` to put at the use site — so a type used by
+three operations is one entry pointed at three times, and the document says "these are the same type":
 
 ```php
 // ...
 $components = SchemaComponents::create();
-$atUseSite = $binding->jsonSchema($components);
+$atUseSite = TypeBinding::jsonSchema($author, $components);
 
 assert(json_encode($atUseSite) === '{"$ref":"#\/components\/schemas\/Author"}');
 
@@ -649,19 +700,19 @@ assert(str_contains((string) $schemas, '"pseudonym":{"anyOf":[{"$ref":"#/compone
 Nullability sits at the use site, never inside the component: `AuthorName` is one type whether or not a given
 property may omit it.
 
-The *same* binding coerces incoming data into instances and reads instances back out. That is the whole reason it
-is one port rather than two — the schema a document advertises and the schema a request is checked against come
-from the same object, so they cannot drift apart:
+The *same* schema turns incoming data into instances and reads instances back out. That is the whole point of the
+type owning it — what a document advertises and what a request is checked against cannot drift apart when there is
+only one of them:
 
 ```php
 // ...
-$author = $binding->coerce(['name' => 'Ada Lovelace'])->value();
-assert($author instanceof Author);
-assert($author->name->value === 'Ada Lovelace');
+$instance = TypeBinding::coerce($author, ['name' => 'Ada Lovelace'])->value();
+assert($instance instanceof Author);
+assert($instance->name->value === 'Ada Lovelace');
 
-assert($binding->serialize($author) === ['name' => 'Ada Lovelace', 'pseudonym' => null]);
+assert(TypeBinding::serialize($instance) === ['name' => 'Ada Lovelace', 'pseudonym' => null]);
 
-$rejected = $binding->coerce(['name' => '']);
+$rejected = TypeBinding::coerce($author, ['name' => '']);
 assert($rejected->success === false);
 assert($rejected->issues?->toArray()[0]->pathAsString() === 'name');
 ```
@@ -669,8 +720,8 @@ assert($rejected->issues?->toArray()[0]->pathAsString() === 'name');
 Two classes with the same short name would both want the component name `Address`, so that fails loudly rather
 than letting whichever was visited first win a name in a public contract.
 
-`neos/schematic` is a **suggested** dependency: `Neos\OpenApi\Schematic\*` is the only namespace that names it,
-and an architecture test enforces that.
+`neos/schematic` is a **required** dependency: describing PHP types is what this package is for, and there is one
+way it is done rather than a seam to swap.
 
 ## Only 3.1
 
@@ -692,7 +743,7 @@ reason for building on `neos/jsonschema` at all.
 The design decisions and their trade-offs:
 
 - target OpenAPI 3.1 only
-- one package, with `neos/schematic` behind a port
+- one package, depending on `neos/schematic` outright
 - a pure spec model plus a separate Dispatch Table
 - the spec model renders, but does not parse
 - response bodies are serialized by schema, not `json_encode`
@@ -700,10 +751,10 @@ The design decisions and their trade-offs:
 
 [CONTEXT.md](CONTEXT.md) is the glossary — the vocabulary this codebase holds itself to.
 
-`neos/schematic` is a **suggested** dependency, not a required one: everything in `Neos\OpenApi\*` talks to a
-`TypeBinding` port, and `Neos\OpenApi\Schematic\*` is its only implementation. An architecture test enforces that
-seam, so extracting a separate `neos/schematic-openapi` package later stays a manifest change rather than a
-refactor.
+`neos/schematic` is a **required** dependency, and `TypeBinding` is the one place that reaches for it. That is a
+seam for *reading* the code, not a swappable port: describing a PHP type is the job, `neos/schematic` is how it is
+done, and pretending otherwise cost an interface, a provider, a redundant exception and a parallel set of test
+doubles that proved only that the doubles worked.
 
 ## Contribution
 

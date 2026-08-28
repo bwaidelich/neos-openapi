@@ -10,12 +10,9 @@ use Neos\OpenApi\ApiDefinition;
 use Neos\OpenApi\Compilation\ApiCompiler;
 use Neos\OpenApi\Http\RequestHandler;
 use Neos\OpenApi\Problem\ProblemDocument;
-use Neos\OpenApi\Schematic\SchematicTypeBindingProvider;
 use Neos\OpenApi\Spec\InfoObject;
 use Neos\OpenApi\Support\FixedContainer;
 use Neos\OpenApi\Tests\Schematic\Fixtures\BlogApi;
-use Neos\Schematic\Attributes\ReflectionMiddleware;
-use Neos\Schematic\Schematic;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ResponseInterface;
 
@@ -35,12 +32,11 @@ final class RequestHandlingTest extends TestCase
     protected function setUp(): void
     {
         $this->api = new BlogApi();
-        $provider = new SchematicTypeBindingProvider(Schematic::create(new ReflectionMiddleware()));
-        $compiled = (new ApiCompiler($provider))->compile(
+        $compiled = (new ApiCompiler())->compile(
             ApiDefinition::create(info: new InfoObject(title: 'Blog', version: '1.0.0'))->withOperationsFrom(BlogApi::class),
         );
         $factory = new HttpFactory();
-        $this->handler = new RequestHandler($compiled, $provider, new FixedContainer($this->api), $factory, $factory);
+        $this->handler = new RequestHandler($compiled, new FixedContainer($this->api), $factory, $factory);
     }
 
     private function handle(string $method, string $uri, string|null $body = null): ResponseInterface

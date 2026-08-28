@@ -5,21 +5,19 @@ declare(strict_types=1);
 namespace Neos\OpenApi\Tests\Schematic;
 
 use Neos\OpenApi\ApiDefinition;
+use Neos\OpenApi\Binding\TypeBinding;
 use Neos\OpenApi\Compilation\ApiCompiler;
 use Neos\OpenApi\Problem\ProblemDocument;
-use Neos\OpenApi\Schematic\SchematicTypeBindingProvider;
 use Neos\OpenApi\Spec\InfoObject;
 use Neos\OpenApi\Support\HttpMethod;
 use Neos\OpenApi\Support\RelativePath;
 use Neos\OpenApi\Tests\Schematic\Fixtures\BlogApi;
-use Neos\Schematic\Attributes\ReflectionMiddleware;
-use Neos\Schematic\Schematic;
 use PHPUnit\Framework\TestCase;
 
 /**
  * End to end: a real API compiled through the real `neos/schematic` adapter.
  *
- * `ApiCompilerTest` covers the compiler itself against a stub provider, which is what proves core needs no engine.
+ * `ApiCompilerTest` covers the compiler's own rules; this is the end-to-end pass over real domain types.
  * This is the other half — that the two actually fit together.
  */
 final class CompilationTest extends TestCase
@@ -29,7 +27,7 @@ final class CompilationTest extends TestCase
      */
     private function compile(): array
     {
-        $compiler = new ApiCompiler(new SchematicTypeBindingProvider(Schematic::create(new ReflectionMiddleware())));
+        $compiler = new ApiCompiler();
         $compiled = $compiler->compile(
             ApiDefinition::create(info: new InfoObject(title: 'Blog', version: '1.0.0'))
                 ->withOperationsFrom(BlogApi::class, tag: 'Blog'),
@@ -132,7 +130,7 @@ final class CompilationTest extends TestCase
 
     public function testTheDispatchTableAndTheDocumentAgree(): void
     {
-        $compiler = new ApiCompiler(new SchematicTypeBindingProvider(Schematic::create(new ReflectionMiddleware())));
+        $compiler = new ApiCompiler();
         $compiled = $compiler->compile(
             ApiDefinition::create(info: new InfoObject(title: 'Blog', version: '1.0.0'))->withOperationsFrom(BlogApi::class),
         );
@@ -144,9 +142,8 @@ final class CompilationTest extends TestCase
         self::assertSame('body', $entry->arguments[0]->source->value);
 
         // and the binding the runtime will use coerces a real payload
-        $binding = (new SchematicTypeBindingProvider(Schematic::create(new ReflectionMiddleware())))
-            ->for($entry->arguments[0]->type);
-        $outcome = $binding->coerce('Ada Lovelace');
+        $type = $entry->arguments[0]->type;
+        $outcome = TypeBinding::coerce($type, 'Ada Lovelace');
         self::assertTrue($outcome->success);
         self::assertInstanceOf(Fixtures\AuthorName::class, $outcome->value());
     }

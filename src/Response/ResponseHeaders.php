@@ -13,7 +13,7 @@ use Traversable;
  *
  * Not a spec model object and deliberately not `JsonSerializable`: the compiler turns it into a
  * {@see HeaderOrReferenceObjectMap} of {@see HeaderObject}s, resolving each declared {@see TypeReference} into a
- * schema on the way — which is a thing only the compiler, holding the {@see TypeBindingProvider} and the
+ * schema on the way — which is a thing only the compiler, holding the {@see \Neos\OpenApi\Binding\TypeBinding}s and the
  * {@see SchemaComponents}, can do.
  *
  * Names are unique **case-insensitively**, because HTTP field names are: declaring `ETag` and `etag` would be one
