@@ -7,3 +7,13 @@ parameters:
     # Deliberately invalid PHP: fixtures for the compiler's own fail-loud checks, which exist precisely because
     # the code they describe is wrong. Analysing them would report the very mistakes they are here to trigger.
     - tests/Compilation/Fixtures/Invalid
+  ignoreErrors:
+    # `static $schema = null; return $schema ??= ...;` is how a class memoizes its own schema — PHP has no typed
+    # function-statics, so the variable reads as mixed and the return with it. The alternatives are all worse: a
+    # static property is a fatal error in an enum and illegal in a readonly class, an inline @var is a lie to the
+    # analyser, and the `instanceof` dance exists only to say what the line already says. Fixtures only: src is
+    # held to the full level.
+    -
+      identifier: return.type
+      message: '#^Method .+::schema\(\) should return Neos\\JsonSchema\\Schema but returns mixed\.$#'
+      path: tests/*
