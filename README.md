@@ -700,9 +700,10 @@ assert(str_contains((string) $schemas, '"pseudonym":{"anyOf":[{"$ref":"#/compone
 Nullability sits at the use site, never inside the component: `AuthorName` is one type whether or not a given
 property may omit it.
 
-The *same* schema turns incoming data into instances and reads instances back out. That is the whole point of the
-type owning it — what a document advertises and what a request is checked against cannot drift apart when there is
-only one of them:
+The *same* schema turns incoming data into instances and reads instances back out — serialization takes the
+`TypeReference` for exactly that reason, so a body is shaped by the schema the document published rather than by
+whatever PHP's one `array` type happened to hold. That is the whole point of the type owning it: what a document
+advertises and what a request is checked against cannot drift apart when there is only one of them:
 
 ```php
 // ...
@@ -710,7 +711,7 @@ $instance = TypeBinding::coerce($author, ['name' => 'Ada Lovelace'])->value();
 assert($instance instanceof Author);
 assert($instance->name->value === 'Ada Lovelace');
 
-assert(TypeBinding::serialize($instance) === ['name' => 'Ada Lovelace', 'pseudonym' => null]);
+assert(TypeBinding::serialize($author, $instance) === ['name' => 'Ada Lovelace', 'pseudonym' => null]);
 
 $rejected = TypeBinding::coerce($author, ['name' => '']);
 assert($rejected->success === false);

@@ -262,7 +262,7 @@ final class TypeBindingTest extends TestCase
         $type = TypeReference::of(Author::class);
         $author = TypeBinding::coerce($type, ['name' => 'Ada', 'posts' => 3])->value();
 
-        self::assertSame(['name' => 'Ada', 'posts' => 3, 'pseudonym' => null], TypeBinding::serialize($author));
+        self::assertSame(['name' => 'Ada', 'posts' => 3, 'pseudonym' => null], TypeBinding::serialize($type, $author));
     }
 
     /**
@@ -275,7 +275,7 @@ final class TypeBindingTest extends TestCase
         TypeBinding::jsonSchema($type, $components);
 
         $block = TypeBinding::coerce($type, ['body' => 'Hello'])->value();
-        $primitives = TypeBinding::serialize($block);
+        $primitives = TypeBinding::serialize($type, $block);
 
         $componentSchema = $components->toSchemaObjectMap()->get('TextBlock');
         self::assertNotNull($componentSchema);

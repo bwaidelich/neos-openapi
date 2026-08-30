@@ -249,7 +249,7 @@ final readonly class RequestHandler implements RequestHandlerInterface
                 $response = $this->json(
                     $result::statusCode()->value,
                     $contentType->value,
-                    TypeBinding::serialize($result->body()),
+                    TypeBinding::serialize($bodyType, $result->body()),
                 );
             }
             return $result instanceof ApiResponseWithHeaders ? $this->withDeclaredHeaders($response, $result) : $response;
@@ -259,7 +259,7 @@ final readonly class RequestHandler implements RequestHandlerInterface
             return $this->responseFactory->createResponse(204);
         }
         // serialized through the binding the document's schema came from, never json_encode'd raw
-        return $this->json(200, 'application/json', TypeBinding::serialize($result));
+        return $this->json(200, 'application/json', TypeBinding::serialize($entry->successType, $result));
     }
 
     /**
@@ -288,7 +288,9 @@ final readonly class RequestHandler implements RequestHandlerInterface
             $value = self::headerValueOf($values, $header->name);
             // an empty *list* is a repeated header repeated no times, which is the same as not sending it — and
             // is not the same as an empty string, which is a value and does go out
-            $field = $value === null ? [] : self::fieldValue(TypeBinding::serialize($value), $header, $result);
+            $field = $value === null
+                ? []
+                : self::fieldValue(TypeBinding::serialize($header->type, $value), $header, $result);
             if ($field === []) {
                 if ($header->required) {
                     throw new \LogicException(sprintf(

@@ -81,16 +81,24 @@ final class TypeBinding
     }
 
     /**
-     * Read an instance back into `json_encode`-ready primitives.
+     * Read an instance back into `json_encode`-ready primitives, shaped the way the schema published for this
+     * type describes them.
+     *
+     * The type is the *declared* one, which is the whole point: an empty PHP array is an empty JSON object or an
+     * empty JSON array depending on what the document says, and the document says what this `TypeReference`
+     * resolves to. Serializing through the runtime class instead would answer from a type the document never
+     * mentions.
      *
      * Fails loudly rather than returning an outcome: unlike coercion, a failure here is never caused by the
      * caller's input — it raises `Neos\Schematic\UnextractableValue`, meaning the class does not expose the state
      * its own constructor names, which is a bug in the API rather than in the request.
+     *
+     * @throws SchemaNotProvided if the type owns no schema
      */
     #[\NoDiscard('inspect the returned primitives; discarding them means the serialization was pointless')]
-    public static function serialize(mixed $value): mixed
+    public static function serialize(TypeReference $type, mixed $value): mixed
     {
-        return Schematic::serialize($value);
+        return Schematic::serialize(self::schemaFor($type), $value);
     }
 
     /**
