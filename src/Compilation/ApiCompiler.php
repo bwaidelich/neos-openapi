@@ -241,7 +241,7 @@ final readonly class ApiCompiler
         $where = sprintf('%s::%s()', $registered->className, $method->getName());
         $classified = [];
         $bodySeen = false;
-        foreach ($method->getParameters() as $parameter) {
+        foreach (self::asDeclared($method)->getParameters() as $parameter) {
             $name = $parameter->getName();
             $required = !$parameter->isOptional();
 
@@ -509,6 +509,55 @@ final readonly class ApiCompiler
             throw new InvalidApiDefinitionException(sprintf('The type "%s" of %s is not supported', $name, $what), 1783500331);
         }
         return TypeReference::builtin($builtin, $type->allowsNull());
+    }
+
+    /**
+     * The declaration of this method whose *parameters* carry the attributes, which is not always the one being
+     * reflected.
+     *
+     * A proxy generator that re-declares a method to wrap it — Flow's AOP weaving, and it is not alone — emits the
+     * method's own attributes but not its parameters' ones: PHP has no way to write the latter through the
+     * reflection API, so a generator has to render them by hand and most do not. The proxy subclasses the class it
+     * wraps, so the declaration the developer wrote is still there, one level up, with everything intact.
+     *
+     * Taking it is not a guess. A generated subclass re-declaring a method is not making a statement about the
+     * API; the class that declared the parameters is. So the closest ancestor whose parameters carry any of this
+     * package's attributes wins, and a method genuinely without any is unaffected, walk or no walk. Types are read
+     * from the same declaration for the same reason — a re-declaration copies them, so the two agree.
+     *
+     * Without this, `#[RequestBody]` and `#[AuthContext]` would silently become ordinary parameters behind such a
+     * generator, and the operation would fail to compile — an error nowhere near its cause.
+     */
+    private static function asDeclared(ReflectionMethod $method): ReflectionMethod
+    {
+        if (self::carriesParameterAttributes($method)) {
+            return $method;
+        }
+        $class = $method->getDeclaringClass()->getParentClass();
+        while ($class !== false) {
+            if ($class->hasMethod($method->getName())) {
+                $inherited = $class->getMethod($method->getName());
+                if (self::carriesParameterAttributes($inherited)) {
+                    return $inherited;
+                }
+            }
+            $class = $class->getParentClass();
+        }
+
+        return $method;
+    }
+
+    private static function carriesParameterAttributes(ReflectionMethod $method): bool
+    {
+        foreach ($method->getParameters() as $parameter) {
+            foreach ([AuthContext::class, RequestBody::class, Parameter::class] as $attribute) {
+                if ($parameter->getAttributes($attribute) !== []) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

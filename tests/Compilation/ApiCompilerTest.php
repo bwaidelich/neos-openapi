@@ -26,6 +26,7 @@ use Neos\OpenApi\Tests\Compilation\Fixtures\CollidingPathApi;
 use Neos\OpenApi\Tests\Compilation\Fixtures\Invalid\MissingReturnTypeApi;
 use Neos\OpenApi\Tests\Compilation\Fixtures\OptionalPathParameterApi;
 use Neos\OpenApi\Tests\Compilation\Fixtures\PostApi;
+use Neos\OpenApi\Tests\Compilation\Fixtures\ProxiedPostApi;
 use Neos\OpenApi\Tests\Compilation\Fixtures\RawRequestApi;
 use Neos\OpenApi\Tests\Compilation\Fixtures\ResponseHeaderApi;
 use Neos\OpenApi\Tests\Compilation\Fixtures\TwoSuccessBranchesApi;
@@ -197,6 +198,27 @@ final class ApiCompilerTest extends TestCase
         $post = $posts['post'];
         self::assertIsArray($post);
         self::assertArrayNotHasKey('parameters', $post);
+    }
+
+    /**
+     * A proxy generator re-declares the method it wraps and drops its parameters' attributes - PHP offers no way
+     * to write them, so most generators do not. The declaration one level up still has them, and it is the one
+     * that meant them; without this the body would become an ordinary parameter and the operation would fail to
+     * compile, nowhere near the cause.
+     */
+    public function testParameterAttributesAreReadFromTheClassThatDeclaredThemNotFromAProxyOverIt(): void
+    {
+        $compiled = $this->compiler->compile($this->definition()->withOperationsFrom(ProxiedPostApi::class));
+        $entry = $compiled->dispatchTable->find(RelativePath::fromString('/posts'), HttpMethod::POST);
+        self::assertNotNull($entry);
+
+        $sources = array_map(static fn($a): string => $a->source->value, $entry->arguments);
+        self::assertSame(['body', 'authContext', 'header'], $sources);
+        // the wire name off the #[Parameter] survived too, which the argument's own name could not have supplied
+        self::assertSame('X-Trace-Id', $entry->arguments[2]->wireName);
+
+        // ...and it is the proxy that gets invoked, not the class the attributes were read from
+        self::assertSame(ProxiedPostApi::class, $entry->apiClassName);
     }
 
     /**
