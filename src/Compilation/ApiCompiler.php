@@ -38,6 +38,7 @@ use Neos\OpenApi\Spec\ResponsesObject;
 use Neos\OpenApi\Support\HttpStatusCode;
 use Neos\OpenApi\Support\MediaTypeRange;
 use Neos\OpenApi\Support\ParameterLocation;
+use Psr\Http\Message\ServerRequestInterface;
 use ReflectionMethod;
 use ReflectionNamedType;
 use ReflectionParameter;
@@ -153,6 +154,10 @@ final readonly class ApiCompiler
                 // the caller's identity is not part of the request's public shape
                 continue;
             }
+            if ($classified->source === ArgumentSource::request) {
+                // the request is not a parameter of itself
+                continue;
+            }
             if ($classified->source === ArgumentSource::body) {
                 $requestBody = new RequestBodyObject(
                     content: MediaTypeObjectMap::create()->with(
@@ -220,10 +225,10 @@ final readonly class ApiCompiler
     /**
      * Decides, for every argument, where its value comes from.
      *
-     * In order: `#[AuthContext]` → `#[RequestBody]` → `#[Parameter]` → named in the path template ⇒ path →
-     * otherwise query. An argument that reaches the end on a method that *could* carry a body is an error rather
-     * than a guess: the predecessor silently treated the first such argument as the body, so reordering a
-     * signature changed the published API.
+     * In order: typed as the request itself → `#[AuthContext]` → `#[RequestBody]` → `#[Parameter]` → named in the
+     * path template ⇒ path → otherwise query. An argument that reaches the end on a method that *could* carry a
+     * body is an error rather than a guess: the predecessor silently treated the first such argument as the body,
+     * so reordering a signature changed the published API.
      *
      * @return list<ClassifiedArgument>
      */
@@ -239,6 +244,14 @@ final readonly class ApiCompiler
         foreach ($method->getParameters() as $parameter) {
             $name = $parameter->getName();
             $required = !$parameter->isOptional();
+
+            if (self::isRequestType($parameter)) {
+                $classified[] = new ClassifiedArgument(
+                    ArgumentBinding::request($name, $this->typeOf($parameter, $where)),
+                    ArgumentSource::request,
+                );
+                continue;
+            }
 
             if ($parameter->getAttributes(AuthContext::class) !== []) {
                 $requirement = $operation->security ?? $api->security;
@@ -498,6 +511,22 @@ final readonly class ApiCompiler
         return TypeReference::builtin($builtin, $type->allowsNull());
     }
 
+    /**
+     * Whether this argument asks for the request itself.
+     *
+     * Decided by the argument's *type* — any type a PSR-7 server request satisfies, so
+     * `ServerRequestInterface`, `RequestInterface` and `MessageInterface` all work.
+     */
+    private static function isRequestType(ReflectionParameter $parameter): bool
+    {
+        $type = $parameter->getType();
+        if (!$type instanceof ReflectionNamedType || $type->isBuiltin()) {
+            return false;
+        }
+
+        return is_a(ServerRequestInterface::class, $type->getName(), true);
+    }
+
     private static function locationOf(ArgumentSource $source): ParameterLocation
     {
         return match ($source) {
@@ -505,7 +534,7 @@ final readonly class ApiCompiler
             ArgumentSource::query => ParameterLocation::query,
             ArgumentSource::header => ParameterLocation::header,
             ArgumentSource::cookie => ParameterLocation::cookie,
-            ArgumentSource::body, ArgumentSource::authContext => throw new \LogicException(
+            ArgumentSource::body, ArgumentSource::authContext, ArgumentSource::request => throw new \LogicException(
                 sprintf('"%s" is not a parameter location', $source->value),
                 1783500332,
             ),

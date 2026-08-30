@@ -9,6 +9,7 @@ use Neos\OpenApi\Attributes\Operation;
 use Neos\OpenApi\Attributes\Parameter;
 use Neos\OpenApi\Attributes\RequestBody;
 use Neos\OpenApi\Support\ParameterLocation;
+use Psr\Http\Message\ServerRequestInterface;
 
 /**
  * The API the request handler is driven against — every argument source, both response shapes, and an operation
@@ -73,6 +74,21 @@ final class TodoApi
     public function deleteTodo(TodoId $id): void
     {
         $this->lastArguments = ['id' => $id];
+    }
+
+    /**
+     * The escape hatch: an operation whose contract is not a set of named parameters — it answers with whatever
+     * the query string held, including the names no signature could have declared.
+     */
+    #[Operation(path: '/search', method: 'GET')]
+    public function search(ServerRequestInterface $request): Todos
+    {
+        $this->lastArguments = ['request' => $request];
+        $todos = [];
+        foreach ($request->getQueryParams() as $name => $value) {
+            $todos[] = Todo::create(TodoId::create($name), is_string($value) ? $value : '');
+        }
+        return Todos::of(...$todos);
     }
 
     /**

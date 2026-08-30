@@ -98,6 +98,7 @@ Nothing is inferred from position. An argument's source is decided by what it ca
 
 | An argument | is filled from |
 | --- | --- |
+| typed as the request itself | the whole request, handed over unread — see [The whole request](#the-whole-request) |
 | marked `#[AuthContext]` | the caller, not the request at all — see [Security](#security) |
 | marked `#[RequestBody]` | the decoded request body |
 | marked `#[Parameter(in: …)]` | that location, under `name:` if it differs from the argument's own |
@@ -153,6 +154,29 @@ assert(array_column($parameters, 'name') === ['slug', 'limit', 'X-Client-Id']);
 assert(array_column($parameters, 'in') === ['path', 'query', 'header']);
 // a path parameter is required by definition; the two with defaults are not, so they say nothing at all
 assert(array_column($parameters, 'required') === [true]);
+```
+
+### The whole request
+
+```php
+// ...
+use Psr\Http\Message\ServerRequestInterface;
+
+final class ForwardingApi
+{
+    #[Operation(path: '/search', method: 'GET', description: 'Every *other* query parameter is forwarded verbatim.')]
+    public function search(ServerRequestInterface $request, Limit|null $limit = null): Slug
+    {
+        return Slug::fromString('found-' . count($request->getQueryParams()));
+    }
+}
+
+$forwarding = json_decode((string) json_encode($compiler->compile(
+    ApiDefinition::create(info: new InfoObject(title: 'Blog', version: '1.0.0'))->withOperationsFrom(ForwardingApi::class),
+)->document, JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR);
+
+// only the declared one is a parameter of the operation
+assert(array_column($forwarding['paths']['/search']['get']['parameters'], 'name') === ['limit']);
 ```
 
 `#[RequestBody]` marks the one argument the body is decoded into — always explicitly, because the predecessor

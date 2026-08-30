@@ -18,4 +18,8 @@ enum ArgumentSource: string
      * Not from the request at all — the caller's identity, from whatever authenticated them.
      */
     case authContext = 'authContext';
+    /**
+     * The whole request, handed over unread — for the operation whose contract is not a set of named parameters.
+     */
+    case request = 'request';
 }

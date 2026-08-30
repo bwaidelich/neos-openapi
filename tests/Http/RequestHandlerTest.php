@@ -171,6 +171,23 @@ final class RequestHandlerTest extends TestCase
         self::assertSame('cli', $this->api->lastArguments['client']);
     }
 
+    /**
+     * The one argument that is not read out of the request but *is* the request. What makes it worth having is
+     * the last assertion: the two query parameters no signature declared still reached the operation, which is
+     * the whole contract of an endpoint that forwards its query string to something else.
+     */
+    public function testAnOperationCanAskForTheRequestItself(): void
+    {
+        $response = $this->handle('GET', '/search?colour=green&size=large');
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertInstanceOf(ServerRequestInterface::class, $this->api->lastArguments['request']);
+        self::assertSame(
+            [['id' => 'colour', 'title' => 'green', 'done' => false], ['id' => 'size', 'title' => 'large', 'done' => false]],
+            $this->decoded($response),
+        );
+    }
+
     public function testAnUnknownPathIsAProblemDocument(): void
     {
         $response = $this->handle('GET', '/nope');

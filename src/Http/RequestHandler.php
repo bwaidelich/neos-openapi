@@ -142,6 +142,10 @@ final readonly class RequestHandler implements RequestHandlerInterface
                 $arguments[$binding->argumentName] = $authContext;
                 continue;
             }
+            if ($binding->source === ArgumentSource::request) {
+                $arguments[$binding->argumentName] = $request;
+                continue;
+            }
             if ($binding->source === ArgumentSource::body) {
                 $body = (string) $request->getBody();
                 if (trim($body) === '') {
@@ -213,7 +217,7 @@ final readonly class RequestHandler implements RequestHandlerInterface
             ArgumentSource::query => $request->getQueryParams()[$binding->wireName] ?? null,
             ArgumentSource::header => $request->hasHeader($binding->wireName) ? $request->getHeaderLine($binding->wireName) : null,
             ArgumentSource::cookie => $request->getCookieParams()[$binding->wireName] ?? null,
-            ArgumentSource::body, ArgumentSource::authContext => throw new \LogicException(
+            ArgumentSource::body, ArgumentSource::authContext, ArgumentSource::request => throw new \LogicException(
                 sprintf('"%s" is not a request parameter', $binding->source->value),
                 1783500413,
             ),

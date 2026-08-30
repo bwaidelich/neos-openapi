@@ -46,4 +46,9 @@ final readonly class ArgumentBinding
     {
         return new self($argumentName, $type, ArgumentSource::authContext, $argumentName, true);
     }
+
+    public static function request(string $argumentName, TypeReference $type): self
+    {
+        return new self($argumentName, $type, ArgumentSource::request, $argumentName, true);
+    }
 }

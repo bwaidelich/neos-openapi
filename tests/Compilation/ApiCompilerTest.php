@@ -26,6 +26,7 @@ use Neos\OpenApi\Tests\Compilation\Fixtures\CollidingPathApi;
 use Neos\OpenApi\Tests\Compilation\Fixtures\Invalid\MissingReturnTypeApi;
 use Neos\OpenApi\Tests\Compilation\Fixtures\OptionalPathParameterApi;
 use Neos\OpenApi\Tests\Compilation\Fixtures\PostApi;
+use Neos\OpenApi\Tests\Compilation\Fixtures\RawRequestApi;
 use Neos\OpenApi\Tests\Compilation\Fixtures\ResponseHeaderApi;
 use Neos\OpenApi\Tests\Compilation\Fixtures\TwoSuccessBranchesApi;
 use Neos\OpenApi\Tests\Compilation\Fixtures\UnaccountedArgumentApi;
@@ -196,6 +197,34 @@ final class ApiCompilerTest extends TestCase
         $post = $posts['post'];
         self::assertIsArray($post);
         self::assertArrayNotHasKey('parameters', $post);
+    }
+
+    /**
+     * The request argument is decided by its type, and like the auth context it is dispatched without being
+     * published - there is nothing about it for a client to send. The declared parameter next to it still is
+     * published, so asking for the request does not turn the rest of the signature into an opaque blob.
+     */
+    public function testTheRequestArgumentIsDispatchedButNotPublished(): void
+    {
+        $compiled = $this->compiler->compile($this->definition()->withOperationsFrom(RawRequestApi::class));
+        $entry = $compiled->dispatchTable->find(RelativePath::fromString('/search'), HttpMethod::GET);
+        self::assertNotNull($entry);
+
+        $sources = array_map(static fn($a): string => $a->source->value, $entry->arguments);
+        self::assertSame(['request', 'query'], $sources);
+
+        $document = $this->document($compiled);
+        self::assertIsArray($document['paths']);
+        $search = $document['paths']['/search'];
+        self::assertIsArray($search);
+        $get = $search['get'];
+        self::assertIsArray($get);
+        $parameters = $get['parameters'];
+        self::assertIsArray($parameters);
+        self::assertCount(1, $parameters);
+        $only = $parameters[0];
+        self::assertIsArray($only);
+        self::assertSame('q', $only['name']);
     }
 
     public function testAnAuthContextOnAnUnsecuredOperationFailsLoudly(): void
