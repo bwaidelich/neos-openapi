@@ -201,7 +201,7 @@ because the document is generated without ever constructing one — and a union 
 | --- | --- |
 | an ordinary type | `200`, described `OK`, with that type's schema |
 | an `ApiResponse` | its own status and description, plus its body schema if it declares one |
-| a union of them | one response per branch (at most one may be an ordinary type) |
+| a union of them | one response per branch; several ordinary types share the `200` as an `anyOf` |
 | `void` or `null` | `204 No Content` — a bodyless response is still a response |
 
 On top of that, an operation taking any input is given a `400`, and one requiring authentication a `401`, both
@@ -268,6 +268,63 @@ assert(array_keys($lookup['paths']['/lookup/{slug}']['delete']['responses']) ===
 The predecessor could give a non-200 response a description but never a body. `bodyType()` closes that: return a
 `TypeReference` and the response documents a schema, which `body()` then renders through the very same binding —
 so an error body is described exactly the way a success body is.
+
+### Several shapes at one status
+
+Ordinary branches all answer the same `200`, and several of them are simply a union: the response describes an
+`anyOf` over them, and the handler renders a result through the branch it belongs to.
+
+```php
+// ...
+use Neos\JsonSchema\ObjectSchema;
+use Neos\JsonSchema\Schema;
+use Neos\JsonSchema\StringSchema;
+use Neos\JsonSchema\Support\ObjectProperties;
+use Neos\JsonSchema\ProvidesSchema;
+
+final readonly class Found implements ProvidesSchema
+{
+    public function __construct(public Slug $slug) {}
+
+    public static function schema(): Schema
+    {
+        return ObjectSchema::create(properties: ObjectProperties::create(slug: Slug::schema()), required: ['slug']);
+    }
+}
+
+final readonly class Missing implements ProvidesSchema
+{
+    public function __construct(public string $reason) {}
+
+    public static function schema(): Schema
+    {
+        return ObjectSchema::create(properties: ObjectProperties::create(reason: StringSchema::create()), required: ['reason']);
+    }
+}
+
+final class AnswerApi
+{
+    #[Operation(path: '/answer/{slug}', method: 'GET')]
+    public function answer(Slug $slug): Found|Missing
+    {
+        return $slug->value === 'missing' ? new Missing('no post has that slug') : new Found($slug);
+    }
+}
+
+$answer = json_decode((string) json_encode($compiler->compile(
+    ApiDefinition::create(info: new InfoObject(title: 'Blog', version: '1.0.0'))->withOperationsFrom(AnswerApi::class),
+)->document, JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR);
+
+// one 200 describing either shape, each branch a component of its own — and `Slug`, which `Found` names, still
+// one component pointed at from inside it
+assert($answer['paths']['/answer/{slug}']['get']['responses'][200]['content']['application/json']['schema'] === [
+    'anyOf' => [
+        ['$ref' => '#/components/schemas/Found'],
+        ['$ref' => '#/components/schemas/Missing'],
+    ],
+]);
+assert($answer['components']['schemas']['Found']['properties']['slug'] === ['$ref' => '#/components/schemas/Slug']);
+```
 
 ### Headers a response carries
 

@@ -9,7 +9,7 @@ use Neos\OpenApi\Attributes\Operation;
 final class TwoSuccessBranchesApi
 {
     /**
-     * Two ordinary branches: each would become a 200, so only the last would survive in the document.
+     * Two ordinary branches: one 200 describing either shape, as a `oneOf` over both.
      */
     #[Operation(path: '/posts', method: 'GET')]
     public function listPosts(bool $detailed = false): Post|PostSlug

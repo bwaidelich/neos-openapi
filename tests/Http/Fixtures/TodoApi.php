@@ -92,6 +92,19 @@ final class TodoApi
     }
 
     /**
+     * A union: one status, two shapes. Which one a result is decided by is the value itself, and the two are
+     * different kinds of thing — an object and a list — so a branch picked wrongly is visible in the body.
+     */
+    #[Operation(path: '/todos/{id}/related', method: 'GET')]
+    public function related(TodoId $id): Todo|Todos
+    {
+        $this->lastArguments = ['id' => $id];
+        return $id->value === 'many'
+            ? Todos::of(Todo::create(TodoId::create('todo-1'), 'Todo 1'), Todo::create(TodoId::create('todo-2'), 'Todo 2'))
+            : Todo::create($id, 'The only one');
+    }
+
+    /**
      * Two required query parameters, so a request missing both is rejected for both at once.
      */
     #[Operation(path: '/reports', method: 'GET')]

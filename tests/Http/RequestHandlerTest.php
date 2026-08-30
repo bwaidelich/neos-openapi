@@ -353,6 +353,25 @@ final class RequestHandlerTest extends TestCase
         self::assertFalse($response->hasHeader('Content-Type'));
     }
 
+    /**
+     * An operation whose return type is a union publishes a schema per branch, so a result is rendered through
+     * the branch it *is* — not through whichever branch happens to be written first.
+     */
+    public function testAUnionResultIsRenderedThroughTheBranchItBelongsTo(): void
+    {
+        self::assertSame(
+            ['id' => 'one', 'title' => 'The only one', 'done' => false],
+            $this->decoded($this->handle('GET', '/todos/one/related')),
+        );
+        self::assertSame(
+            [
+                ['id' => 'todo-1', 'title' => 'Todo 1', 'done' => false],
+                ['id' => 'todo-2', 'title' => 'Todo 2', 'done' => false],
+            ],
+            $this->decoded($this->handle('GET', '/todos/many/related')),
+        );
+    }
+
     public function testAVoidOperationAnswersABodyless204(): void
     {
         $response = $this->handle('DELETE', '/todos/write-tests');

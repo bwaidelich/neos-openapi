@@ -9,6 +9,7 @@ use Neos\JsonSchema\Validation\Issue;
 use Neos\JsonSchema\Validation\IssueCode;
 use Neos\JsonSchema\Validation\Issues;
 use Neos\OpenApi\Binding\TypeBinding;
+use Neos\OpenApi\Binding\TypeReference;
 use Neos\OpenApi\Compilation\CompiledApi;
 use Neos\OpenApi\Dispatch\ArgumentBinding;
 use Neos\OpenApi\Dispatch\ArgumentSource;
@@ -258,12 +259,47 @@ final readonly class RequestHandler implements RequestHandlerInterface
             }
             return $result instanceof ApiResponseWithHeaders ? $this->withDeclaredHeaders($response, $result) : $response;
         }
-        if ($entry->successType === null) {
+        if ($entry->successTypes === []) {
             // the operation returns `void`, which the document describes as a 204
             return $this->responseFactory->createResponse(204);
         }
         // serialized through the binding the document's schema came from, never json_encode'd raw
-        return $this->json(200, 'application/json', TypeBinding::serialize($entry->successType, $result));
+        return $this->json(200, 'application/json', TypeBinding::serialize(self::successTypeOf($entry, $result), $result));
+    }
+
+    /**
+     * The declared type to serialize a result through — the branch of the operation's return type it belongs to.
+     *
+     * One branch is the whole contract: the value is serialized through it whatever it turns out to be, which is
+     * what makes the document's promise the *declared* type rather than the returned object's class.
+     *
+     * Several branches are a union, and then the first one the value matches is it — the same rule the `anyOf`
+     * published for them states, and the same one {@see \Neos\JsonSchema\Validation\Projection} follows when it
+     * shapes a value against a union. Branches are allowed to overlap, one extending another included: which of
+     * the matching ones is picked does not change the body, since what is read out of the value comes from the
+     * value's own class either way.
+     *
+     * A value that matches none of them is a bug in the API rather than in the request — there is no schema the
+     * document published for it — so it fails loudly instead of going out under a shape nobody described.
+     */
+    private static function successTypeOf(DispatchEntry $entry, mixed $result): TypeReference
+    {
+        if (count($entry->successTypes) === 1) {
+            return $entry->successTypes[0];
+        }
+        foreach ($entry->successTypes as $type) {
+            if ($type->describes($result)) {
+                return $type;
+            }
+        }
+        throw new \LogicException(sprintf(
+            '%s::%s() returned %s, which is none of the branches its return type declares (%s). The document '
+            . 'publishes a schema per branch, and there is none for this.',
+            $entry->apiClassName,
+            $entry->methodName,
+            get_debug_type($result),
+            implode(', ', array_map(static fn(TypeReference $type): string => $type->describe(), $entry->successTypes)),
+        ), 1783500415);
     }
 
     /**

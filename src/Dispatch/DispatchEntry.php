@@ -17,16 +17,15 @@ final readonly class DispatchEntry
     /**
      * @param class-string $apiClassName
      * @param list<ArgumentBinding> $arguments
-     * @param TypeReference|null $successType the *declared* type of a successful result, or null for `void`.
-     *                                        Declared rather than the returned value's own class, because the
-     *                                        declared type is what the document describes — serializing through
-     *                                        anything else would emit a body the document does not promise.
+     * @param list<TypeReference> $successTypes the *declared* types a successful result may have — empty for
+     *                                          `void`, one for an ordinary return type, several for a union,
+     *                                          in the order they were declared.
      */
     public function __construct(
         public string $apiClassName,
         public string $methodName,
         public array $arguments,
         public string|null $operationId,
-        public TypeReference|null $successType = null,
+        public array $successTypes = [],
     ) {}
 }

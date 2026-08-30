@@ -497,13 +497,77 @@ final class ApiCompilerTest extends TestCase
     }
 
     /**
-     * Each ordinary branch would become a 200, so a second would silently overwrite the first.
+     * A type that cannot be constructed is refused rather than published: a body carrying one could never be read
+     * back into it, so what a document said about it would only ever be half true.
      */
-    public function testMoreThanOneOrdinarySuccessBranchIsRejected(): void
+    public function testAReturnTypeThatCannotBeConstructedIsRefused(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/cannot be instantiated/');
+        $this->compiler->compile($this->definition()->withOperationsFrom(Fixtures\Invalid\AbstractReturnTypeApi::class));
+    }
+
+    /**
+     * Several ordinary branches are one 200 describing several shapes: an `anyOf` over them, each branch hoisted
+     * exactly the way a lone one would be — so a type published here is the same component it is anywhere else,
+     * and everything it names in turn keeps its own component too.
+     */
+    public function testSeveralOrdinarySuccessBranchesBecomeAnAnyOfOverThem(): void
+    {
+        $compiled = $this->compiler->compile($this->definition()->withOperationsFrom(TwoSuccessBranchesApi::class));
+        $document = $this->document($compiled);
+
+        self::assertSame(
+            ['anyOf' => [
+                ['$ref' => '#/components/schemas/Post'],
+                ['$ref' => '#/components/schemas/PostSlug'],
+            ]],
+            $this->arrayAt($document, 'paths', '/posts', 'get', 'responses', 200, 'content', 'application/json', 'schema'),
+        );
+        // `PostTitle` is named only *inside* `Post`: a branch is walked into like any other declared type
+        self::assertSame(
+            ['Post', 'PostSlug', 'PostTitle', 'ProblemDocument'],
+            array_keys($this->arrayAt($document, 'components', 'schemas')),
+        );
+
+        $entry = $compiled->dispatchTable->find(RelativePath::fromString('/posts'), HttpMethod::GET);
+        self::assertNotNull($entry);
+        self::assertSame(
+            [Fixtures\Post::class, Fixtures\PostSlug::class],
+            array_map(static fn(TypeReference $type): string|null => $type->className(), $entry->successTypes),
+        );
+    }
+
+    /**
+     * Unions describe what an operation *answers*, never what it takes. Going out the value exists, so which
+     * branch it is can simply be asked; coming in there is only primitives, and deciding which branch to build
+     * them into is a question nothing here can answer.
+     */
+    public function testAUnionArgumentIsRejected(): void
     {
         $this->expectException(InvalidApiDefinitionException::class);
-        $this->expectExceptionMessageMatches('/more than one ordinary branch/');
-        $this->compiler->compile($this->definition()->withOperationsFrom(TwoSuccessBranchesApi::class));
+        $this->expectExceptionMessageMatches('/must have a single named type/');
+        $this->compiler->compile($this->definition()->withOperationsFrom(Fixtures\Invalid\UnionArgumentApi::class));
+    }
+
+    /**
+     * Branches are allowed to overlap — a `DetailedReply` is a `Reply` — because nothing has to tell them apart:
+     * the handler renders a result through the first branch it matches, and `anyOf` asks a consumer for no more
+     * than that either.
+     */
+    public function testBranchesThatOverlapAreAccepted(): void
+    {
+        $document = $this->document($this->compiler->compile(
+            $this->definition()->withOperationsFrom(Fixtures\OverlappingBranchesApi::class),
+        ));
+
+        self::assertSame(
+            ['anyOf' => [
+                ['$ref' => '#/components/schemas/Reply'],
+                ['$ref' => '#/components/schemas/DetailedReply'],
+            ]],
+            $this->arrayAt($document, 'paths', '/replies', 'get', 'responses', 200, 'content', 'application/json', 'schema'),
+        );
     }
 
     /**
@@ -516,12 +580,13 @@ final class ApiCompilerTest extends TestCase
 
         $getPost = $table->find(RelativePath::fromString('/posts/{slug}'), HttpMethod::GET);
         self::assertNotNull($getPost);
-        self::assertSame(Fixtures\Post::class, $getPost->successType?->className());
+        self::assertCount(1, $getPost->successTypes);
+        self::assertSame(Fixtures\Post::class, $getPost->successTypes[0]->className());
 
         // `void` declares no success body at all
         $health = $table->find(RelativePath::fromString('/health'), HttpMethod::GET);
         self::assertNotNull($health);
-        self::assertNull($health->successType);
+        self::assertSame([], $health->successTypes);
     }
 
     public function testTheDispatchTableIsSerializable(): void

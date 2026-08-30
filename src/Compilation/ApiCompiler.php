@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Neos\OpenApi\Compilation;
 
+use Neos\JsonSchema\AnyOfSchema;
+use Neos\JsonSchema\Schema as JsonSchema;
 use Neos\OpenApi\ApiDefinition;
 use Neos\OpenApi\Attributes\AuthContext;
 use Neos\OpenApi\Attributes\Operation;
@@ -109,7 +111,7 @@ final readonly class ApiCompiler
                     $method->getName(),
                     array_map(static fn(ClassifiedArgument $a): ArgumentBinding => $a->binding, $arguments),
                     $operationId,
-                    $branches['success'],
+                    $branches['successes'],
                 ));
             }
         }
@@ -136,7 +138,7 @@ final readonly class ApiCompiler
 
     /**
      * @param list<ClassifiedArgument> $arguments
-     * @param array{apiResponses: list<class-string<ApiResponse>>, success: TypeReference|null, empty: bool} $branches
+     * @param array{apiResponses: list<class-string<ApiResponse>>, successes: list<TypeReference>, empty: bool} $branches
      */
     private function compileOperation(
         ApiDefinition $api,
@@ -361,12 +363,10 @@ final readonly class ApiCompiler
     /**
      * Splits a return type into the responses it declares.
      *
-     * At most *one* branch may be an ordinary type: each would become a `200`, so a second would silently
-     * overwrite the first and the document would describe only whichever came last. The declared type is also what
-     * the runtime serializes through — not the returned value's own class, since only the declared one is what the
-     * document promises.
+     * Ordinary branches — everything that is not an {@see ApiResponse}, `void` or `null` — all answer the same
+     * `200`, and several of them are a union: the response documents an `anyOf` over them,
      *
-     * @return array{apiResponses: list<class-string<ApiResponse>>, success: TypeReference|null, empty: bool}
+     * @return array{apiResponses: list<class-string<ApiResponse>>, successes: list<TypeReference>, empty: bool}
      */
     private function returnBranches(ReflectionMethod $method): array
     {
@@ -376,7 +376,7 @@ final readonly class ApiCompiler
             throw new InvalidApiDefinitionException(sprintf('%s has no return type, so its responses cannot be described', $where), 1783500328);
         }
         $apiResponses = [];
-        $success = null;
+        $successes = [];
         $empty = false;
         $types = $returnType instanceof ReflectionUnionType ? $returnType->getTypes() : [$returnType];
         foreach ($types as $type) {
@@ -396,22 +396,13 @@ final readonly class ApiCompiler
                 $apiResponses[] = $name;
                 continue;
             }
-            if ($success !== null) {
-                throw new InvalidApiDefinitionException(sprintf(
-                    'The return type of %s has more than one ordinary branch ("%s" and "%s"). Each would be a 200, '
-                    . 'so only the last would survive — give the others an ApiResponse type.',
-                    $where,
-                    $success->describe(),
-                    $name,
-                ), 1783500333);
-            }
-            $success = $this->namedTypeToReference($type, sprintf('the return type of %s', $where));
+            $successes[] = $this->namedTypeToReference($type, sprintf('the return type of %s', $where));
         }
-        return ['apiResponses' => $apiResponses, 'success' => $success, 'empty' => $empty];
+        return ['apiResponses' => $apiResponses, 'successes' => $successes, 'empty' => $empty];
     }
 
     /**
-     * @param array{apiResponses: list<class-string<ApiResponse>>, success: TypeReference|null, empty: bool} $branches
+     * @param array{apiResponses: list<class-string<ApiResponse>>, successes: list<TypeReference>, empty: bool} $branches
      */
     private function compileResponses(array $branches, SchemaComponents $components): ResponsesObject
     {
@@ -419,11 +410,15 @@ final readonly class ApiCompiler
         foreach ($branches['apiResponses'] as $responseClassName) {
             $responses = $responses->with($responseClassName::statusCode(), $this->apiResponse($responseClassName, $components));
         }
-        if ($branches['success'] !== null) {
+        if ($branches['successes'] !== []) {
+            $schemas = array_map(
+                static fn(TypeReference $type): JsonSchema => TypeBinding::jsonSchema($type, $components),
+                $branches['successes'],
+            );
             $responses = $responses->with(HttpStatusCode::fromInteger(200), new ResponseObject(
                 description: 'OK',
                 content: MediaTypeObjectMap::json(new MediaTypeObject(
-                    schema: TypeBinding::jsonSchema($branches['success'], $components),
+                    schema: count($schemas) === 1 ? $schemas[0] : AnyOfSchema::create(...$schemas),
                 )),
             ));
         }

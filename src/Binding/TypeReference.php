@@ -61,6 +61,27 @@ final readonly class TypeReference
     }
 
     /**
+     * Whether $value matches this TypeReference ($this).
+     */
+    public function describes(mixed $value): bool
+    {
+        if ($value === null) {
+            return $this->nullable;
+        }
+        $className = $this->className();
+        if ($className !== null) {
+            return $value instanceof $className;
+        }
+        $builtin = $this->builtinType();
+        return $builtin !== null && match ($builtin) {
+            BuiltinType::string => is_string($value),
+            BuiltinType::int => is_int($value),
+            BuiltinType::float => is_float($value),
+            BuiltinType::bool => is_bool($value),
+        };
+    }
+
+    /**
      * How to name this type in an error message.
      */
     public function describe(): string
