@@ -122,7 +122,7 @@ final readonly class Limit implements ProvidesJsonSchema
 
     public static function fromInteger(int $value): self
     {
-        return \Neos\Schematic\Schematic::instantiate(self::class, $value, static fn(int $v): self => new self($v));
+        return \Neos\Schematic\Schematic::instantiate(self::class, $value);
     }
 
     public static function schema(): JsonSchema
@@ -154,6 +154,34 @@ assert(array_column($parameters, 'name') === ['slug', 'limit', 'X-Client-Id']);
 assert(array_column($parameters, 'in') === ['path', 'query', 'header']);
 // a path parameter is required by definition; the two with defaults are not, so they say nothing at all
 assert(array_column($parameters, 'required') === [true]);
+```
+
+### Input that is always a string
+
+A JSON body arrives with real types: `{"limit": "10"}` sent a string, and a string is not an integer — the request
+is rejected, and says so. But a path segment, a query value, a header line and a cookie are *only ever* strings, so
+judging one the same way would reject everything. Which of the two a value is, is a fact about **where the request
+carried it**, and that is what decides how strictly it is read:
+
+```php
+// ...
+use Neos\OpenApi\Binding\BuiltinType;
+use Neos\OpenApi\Binding\TypeBinding;
+use Neos\OpenApi\Binding\TypeReference;
+use Neos\OpenApi\Dispatch\ArgumentSource;
+
+$limitType = TypeReference::builtin(BuiltinType::int);
+
+// a query parameter: "10" is the integer it is spelled as
+assert(TypeBinding::coerce($limitType, '10', ArgumentSource::query)->value() === 10);
+
+// the same characters in a JSON body: a string, and the wrong type
+assert(TypeBinding::coerce($limitType, '10', ArgumentSource::body)->success === false);
+
+// what it cannot read is passed on untouched, so validation reports the precise reason
+$rejected = TypeBinding::coerce($limitType, 'ten', ArgumentSource::query);
+assert($rejected->success === false);
+assert($rejected->issues?->codes() === ['invalid_type']);
 ```
 
 ### The whole request

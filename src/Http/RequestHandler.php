@@ -274,8 +274,8 @@ final readonly class RequestHandler implements RequestHandlerInterface
      * what makes the document's promise the *declared* type rather than the returned object's class.
      *
      * Several branches are a union, and then the first one the value matches is it — the same rule the `anyOf`
-     * published for them states, and the same one {@see \Neos\JsonSchema\Validation\Projection} follows when it
-     * shapes a value against a union. Branches are allowed to overlap, one extending another included: which of
+     * published for them states, and the same one `neos/schematic` follows when it reads a value out under a
+     * union. Branches are allowed to overlap, one extending another included: which of
      * the matching ones is picked does not change the body, since what is read out of the value comes from the
      * value's own class either way.
      *

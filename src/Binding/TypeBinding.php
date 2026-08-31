@@ -9,7 +9,6 @@ use Neos\JsonSchema\IntegerSchema;
 use Neos\JsonSchema\NumberSchema;
 use Neos\JsonSchema\Schema as JsonSchema;
 use Neos\JsonSchema\StringSchema;
-use Neos\JsonSchema\Validation\Normalization;
 use Neos\OpenApi\Compilation\SchemaComponents;
 use Neos\OpenApi\Dispatch\ArgumentSource;
 use Neos\Schematic\SchemaNotProvided;
@@ -61,7 +60,7 @@ final class TypeBinding
      *
      * A JSON body arrives with real types, so `{"age": "45"}` is a string and is rejected as one. Every other
      * source is *always* a string — a path segment, a query value, a header line — so judging one that way would
-     * reject everything, and it opts into scalar normalization instead.
+     * reject everything, and it is read through {@see ScalarNormalizer} first.
      *
      * @throws SchemaNotProvided if the type owns no schema
      */
@@ -72,12 +71,16 @@ final class TypeBinding
             // `null` is the absence of a value, so there is nothing to build and nothing to validate
             return CoercionOutcome::ok(null);
         }
-        $normalization = $source === ArgumentSource::body ? Normalization::None : Normalization::Scalars;
+        $schema = self::schemaFor($type);
+        $value = $source === ArgumentSource::body ? $input : ScalarNormalizer::normalize($schema, $input);
         $className = $type->className();
-        $result = $className === null
-            ? self::schemaFor($type)->validate($input, $normalization)
-            : Schematic::map($className, $input, $normalization);
-        return $result->valid ? CoercionOutcome::ok($result->value()) : CoercionOutcome::failed($result->issues);
+        if ($className === null) {
+            // a builtin is its own value once it is the type the schema declares — there is nothing to build
+            $result = $schema->validate($value);
+            return $result->valid ? CoercionOutcome::ok($value) : CoercionOutcome::failed($result->issues);
+        }
+        $mapped = Schematic::map($className, $value);
+        return $mapped->success ? CoercionOutcome::ok($mapped->value()) : CoercionOutcome::failed($mapped->issues);
     }
 
     /**
