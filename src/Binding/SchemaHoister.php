@@ -7,9 +7,11 @@ namespace Neos\OpenApi\Binding;
 use Neos\JsonSchema\ArraySchema as JsonArraySchema;
 use Neos\JsonSchema\Nullable;
 use Neos\JsonSchema\ObjectSchema as JsonObjectSchema;
+use Neos\JsonSchema\ProvidesSchema;
 use Neos\JsonSchema\Schema as JsonSchema;
 use Neos\JsonSchema\Support\ObjectProperties;
 use Neos\OpenApi\Compilation\SchemaComponents;
+use Neos\OpenApi\Exception\InvalidApiDefinitionException;
 use Neos\OpenApi\Spec\SchemaObjectMap;
 use Neos\Schematic\Reflection\ClassShape;
 use Neos\Schematic\Reflection\Nature;
@@ -64,12 +66,11 @@ final class SchemaHoister
     /**
      * The type's own schema with its class-typed children hoisted out — what a component entry contains.
      *
-     * @type T of ProvidesSchema
-     * @param class-string<T> $className
+     * @param class-string $className
      */
     private static function body(string $className, SchemaComponents $components): JsonSchema
     {
-        $schema = $className::schema();
+        $schema = TypeBinding::ownSchema($className);
         $shape = ClassShape::of($className);
         return match ($shape->nature) {
             // a leaf: there is no child that could become a component of its own
@@ -117,6 +118,17 @@ final class SchemaHoister
         }
         /** @var class-string $className */
         $className = $type->getName();
+        if (!is_a($className, ProvidesSchema::class, true)) {
+            // a member of a described class is a member that has to be described, so the refusal can say whose it
+            // is — which is worth more than the same message from one level down
+            throw new InvalidApiDefinitionException(sprintf(
+                'The type "%s" of the member "$%s" of "%s" provides no schema: implement %s',
+                $className,
+                $parameter->getName(),
+                $parameter->getDeclaringClass()?->getName() ?? 'an unknown class',
+                ProvidesSchema::class,
+            ), 1783500333);
+        }
         return TypeReference::of($className, $type->allowsNull());
     }
 

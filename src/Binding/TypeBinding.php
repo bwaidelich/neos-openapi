@@ -12,7 +12,7 @@ use Neos\JsonSchema\Schema as JsonSchema;
 use Neos\JsonSchema\StringSchema;
 use Neos\OpenApi\Compilation\SchemaComponents;
 use Neos\OpenApi\Dispatch\ArgumentSource;
-use Neos\Schematic\SchemaNotProvided;
+use Neos\OpenApi\Exception\InvalidApiDefinitionException;
 use Neos\Schematic\Schematic;
 
 /**
@@ -48,8 +48,6 @@ final class TypeBinding
      * For a named type that is a `$ref`; for an anonymous one, the schema itself. The accumulator is threaded
      * through rather than returned because hoisting spans a whole document: two operations using the same type
      * must end up pointing at one entry.
-     *
-     * @throws SchemaNotProvided if the type owns no schema
      */
     public static function jsonSchema(TypeReference $type, SchemaComponents $components): JsonSchema
     {
@@ -62,8 +60,6 @@ final class TypeBinding
      * A JSON body arrives with real types, so `{"age": "45"}` is a string and is rejected as one. Every other
      * source is *always* a string — a path segment, a query value, a header line — so judging one that way would
      * reject everything, and it is read through {@see ScalarNormalizer} first.
-     *
-     * @throws SchemaNotProvided if the type owns no schema
      */
     #[\NoDiscard('inspect the CoercionOutcome; discarding it means the coercion was pointless')]
     public static function coerce(TypeReference $type, mixed $input, ArgumentSource $source = ArgumentSource::body): CoercionOutcome
@@ -80,7 +76,7 @@ final class TypeBinding
             $result = $schema->validate($value);
             return $result->valid ? CoercionOutcome::ok($value) : CoercionOutcome::failed($result->issues);
         }
-        $built = Schematic::instanciate($className, $value);
+        $built = Schematic::instanciate(self::describedClass($className), $value);
         return $built->success ? CoercionOutcome::ok($built->value()) : CoercionOutcome::failed($built->issues);
     }
 
@@ -96,8 +92,6 @@ final class TypeBinding
      * Fails loudly rather than returning an outcome: unlike coercion, a failure here is never caused by the
      * caller's input — it raises `Neos\Schematic\UnextractableValue`, meaning the class does not expose the state
      * its own constructor names, which is a bug in the API rather than in the request.
-     *
-     * @throws SchemaNotProvided if the type owns no schema
      */
     #[\NoDiscard('inspect the returned primitives; discarding them means the serialization was pointless')]
     public static function serialize(TypeReference $type, mixed $value): mixed
@@ -106,23 +100,48 @@ final class TypeBinding
     }
 
     /**
-     * @throws SchemaNotProvided if the type owns no schema
+     * The schema a class owns, which is the only thing this package will describe, read or write a value against.
+     *
+     * A class name reaches here off reflection — an operation's signature, a described class's member — so owning
+     * a schema is established here rather than assumed. A class that owns none is a mistake in the code being
+     * described, not in a request, so it is refused the way the compiler refuses an unsupported type.
+     *
+     * @param class-string $className
+     * @internal also reached from {@see SchemaHoister}
      */
+    public static function ownSchema(string $className): JsonSchema
+    {
+        $described = self::describedClass($className);
+        return $described::schema();
+    }
+
+    /**
+     * The same answer as a *type*, for the one caller that needs the class rather than its schema: building an
+     * instance goes through `Schematic::instanciate()`, which takes a class that owns a schema and nothing else.
+     *
+     * @param class-string $className
+     * @return class-string<ProvidesSchema>
+     */
+    private static function describedClass(string $className): string
+    {
+        if (!is_a($className, ProvidesSchema::class, true)) {
+            throw new InvalidApiDefinitionException(sprintf(
+                'The type "%s" provides no schema: implement %s',
+                $className,
+                ProvidesSchema::class,
+            ), 1783500332);
+        }
+        return $className;
+    }
+
     private static function schemaFor(TypeReference $type): JsonSchema
     {
-        $builtin = $type->builtinType();
-        if ($builtin === null) {
-            /** @var class-string $className */
-            $className = $type->type;
-            // a type reference carries a class *name*, so nothing about it has been checked yet — a class that
-            // owns no schema is refused here rather than reaching an undefined schema() call
-            if (!is_a($className, ProvidesSchema::class, true)) {
-                throw SchemaNotProvided::forClass($className);
-            }
-            return $className::schema();
+        $named = $type->type;
+        if (is_string($named)) {
+            return self::ownSchema($named);
         }
         // a builtin has no class to ask, so it maps straight onto the corresponding JSON Schema
-        return match ($builtin) {
+        return match ($named) {
             BuiltinType::string => StringSchema::create(),
             BuiltinType::int => IntegerSchema::create(),
             BuiltinType::float => NumberSchema::create(),

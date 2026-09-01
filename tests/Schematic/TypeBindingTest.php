@@ -12,15 +12,16 @@ use Neos\OpenApi\Binding\TypeReference;
 use Neos\OpenApi\Compilation\SchemaComponents;
 use Neos\OpenApi\Dispatch\ArgumentSource;
 use Neos\OpenApi\Exception\ComponentNameCollisionException;
+use Neos\OpenApi\Exception\InvalidApiDefinitionException;
 use Neos\OpenApi\Tests\Schematic\Fixtures\Author;
 use Neos\OpenApi\Tests\Schematic\Fixtures\AuthorName;
 use Neos\OpenApi\Tests\Schematic\Fixtures\AuthorNames;
 use Neos\OpenApi\Tests\Schematic\Fixtures\Collaboration;
 use Neos\OpenApi\Tests\Schematic\Fixtures\Colliding\Rival;
+use Neos\OpenApi\Tests\Schematic\Fixtures\Describing;
 use Neos\OpenApi\Tests\Schematic\Fixtures\PostStatus;
 use Neos\OpenApi\Tests\Schematic\Fixtures\TextBlock;
 use Neos\OpenApi\Tests\Schematic\Fixtures\Undescribable;
-use Neos\Schematic\SchemaNotProvided;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -191,11 +192,16 @@ final class TypeBindingTest extends TestCase
         TypeBinding::jsonSchema(TypeReference::of(Rival::class), $components);
     }
 
-    public function testATypeOwningNoSchemaIsRefused(): void
+    /**
+     * A type owning no schema cannot be *referred to* at all — {@see TypeReference::of()} takes a
+     * `class-string<ProvidesSchema>`, so naming one is a type error rather than a runtime surprise. What is left
+     * to catch is the member reflection walks into on the way down, which is where the refusal lives.
+     */
+    public function testAMemberOwningNoSchemaIsRefused(): void
     {
-        $this->expectException(SchemaNotProvided::class);
-        $this->expectExceptionMessageMatches('/' . preg_quote(Undescribable::class, '/') . '" provides no schema/');
-        TypeBinding::jsonSchema(TypeReference::of(Undescribable::class), SchemaComponents::create());
+        $this->expectException(InvalidApiDefinitionException::class);
+        $this->expectExceptionMessageMatches('/"' . preg_quote(Undescribable::class, '/') . '" of the member "\$held" of "' . preg_quote(Describing::class, '/') . '" provides no schema/');
+        TypeBinding::jsonSchema(TypeReference::of(Describing::class), SchemaComponents::create());
     }
 
     public function testCoercionTurnsRequestDataIntoAnInstance(): void
