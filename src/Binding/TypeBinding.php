@@ -7,6 +7,7 @@ namespace Neos\OpenApi\Binding;
 use Neos\JsonSchema\BooleanSchema;
 use Neos\JsonSchema\IntegerSchema;
 use Neos\JsonSchema\NumberSchema;
+use Neos\JsonSchema\ProvidesSchema;
 use Neos\JsonSchema\Schema as JsonSchema;
 use Neos\JsonSchema\StringSchema;
 use Neos\OpenApi\Compilation\SchemaComponents;
@@ -79,8 +80,8 @@ final class TypeBinding
             $result = $schema->validate($value);
             return $result->valid ? CoercionOutcome::ok($value) : CoercionOutcome::failed($result->issues);
         }
-        $mapped = Schematic::map($className, $value);
-        return $mapped->success ? CoercionOutcome::ok($mapped->value()) : CoercionOutcome::failed($mapped->issues);
+        $built = Schematic::instanciate($className, $value);
+        return $built->success ? CoercionOutcome::ok($built->value()) : CoercionOutcome::failed($built->issues);
     }
 
     /**
@@ -113,7 +114,12 @@ final class TypeBinding
         if ($builtin === null) {
             /** @var class-string $className */
             $className = $type->type;
-            return Schematic::schemaFor($className);
+            // a type reference carries a class *name*, so nothing about it has been checked yet — a class that
+            // owns no schema is refused here rather than reaching an undefined schema() call
+            if (!is_a($className, ProvidesSchema::class, true)) {
+                throw SchemaNotProvided::forClass($className);
+            }
+            return $className::schema();
         }
         // a builtin has no class to ask, so it maps straight onto the corresponding JSON Schema
         return match ($builtin) {

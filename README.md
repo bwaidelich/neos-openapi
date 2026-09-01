@@ -122,7 +122,7 @@ final readonly class Limit implements ProvidesJsonSchema
 
     public static function fromInteger(int $value): self
     {
-        return \Neos\Schematic\Schematic::instantiate(self::class, $value);
+        return \Neos\Schematic\Schematic::instanciate(self::class, $value)->valueOrThrow();
     }
 
     public static function schema(): JsonSchema

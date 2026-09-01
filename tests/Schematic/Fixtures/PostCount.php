@@ -15,7 +15,7 @@ final readonly class PostCount implements ProvidesSchema
 
     public static function of(int $value): self
     {
-        return Schematic::instantiate(self::class, $value);
+        return Schematic::instanciate(self::class, $value)->valueOrThrow();
     }
 
     public static function fromInteger(int $value): self

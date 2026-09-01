@@ -18,7 +18,7 @@ final readonly class AuthorName implements ProvidesSchema
 
     public static function of(string $value): self
     {
-        return Schematic::instantiate(self::class, $value);
+        return Schematic::instanciate(self::class, $value)->valueOrThrow();
     }
 
     public static function fromString(string $value): self

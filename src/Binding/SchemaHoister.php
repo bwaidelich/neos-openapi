@@ -13,7 +13,6 @@ use Neos\OpenApi\Compilation\SchemaComponents;
 use Neos\OpenApi\Spec\SchemaObjectMap;
 use Neos\Schematic\Reflection\ClassShape;
 use Neos\Schematic\Reflection\Nature;
-use Neos\Schematic\Schematic;
 
 /**
  * Lifts every named type out of a schema into `#/components/schemas`, leaving a `$ref` behind.
@@ -65,11 +64,12 @@ final class SchemaHoister
     /**
      * The type's own schema with its class-typed children hoisted out — what a component entry contains.
      *
-     * @param class-string $className
+     * @type T of ProvidesSchema
+     * @param class-string<T> $className
      */
     private static function body(string $className, SchemaComponents $components): JsonSchema
     {
-        $schema = Schematic::schemaFor($className);
+        $schema = $className::schema();
         $shape = ClassShape::of($className);
         return match ($shape->nature) {
             // a leaf: there is no child that could become a component of its own
