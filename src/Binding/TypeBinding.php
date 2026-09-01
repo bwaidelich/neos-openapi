@@ -14,6 +14,7 @@ use Neos\OpenApi\Compilation\SchemaComponents;
 use Neos\OpenApi\Dispatch\ArgumentSource;
 use Neos\OpenApi\Exception\InvalidApiDefinitionException;
 use Neos\Schematic\Schematic;
+use Neos\Schematic\Serialization\Serializer;
 
 /**
  * Everything this package needs to know about one PHP type: how to describe it, how to read a value into it, and
@@ -96,7 +97,7 @@ final class TypeBinding
     #[\NoDiscard('inspect the returned primitives; discarding them means the serialization was pointless')]
     public static function serialize(TypeReference $type, mixed $value): mixed
     {
-        return Schematic::serialize(self::schemaFor($type), $value);
+        return Serializer::serialize($value, self::schemaFor($type));
     }
 
     /**
