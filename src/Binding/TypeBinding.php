@@ -77,7 +77,7 @@ final class TypeBinding
             $result = $schema->validate($value);
             return $result->valid ? CoercionOutcome::ok($value) : CoercionOutcome::failed($result->issues);
         }
-        $built = Schematic::instanciate(self::describedClass($className), $value);
+        $built = Schematic::instantiate(self::describedClass($className), $value);
         return $built->success ? CoercionOutcome::ok($built->value()) : CoercionOutcome::failed($built->issues);
     }
 
@@ -118,7 +118,7 @@ final class TypeBinding
 
     /**
      * The same answer as a *type*, for the one caller that needs the class rather than its schema: building an
-     * instance goes through `Schematic::instanciate()`, which takes a class that owns a schema and nothing else.
+     * instance goes through `Schematic::instantiate()`, which takes a class that owns a schema and nothing else.
      *
      * @param class-string $className
      * @return class-string<ProvidesSchema>

@@ -39,7 +39,7 @@ final readonly class Slug implements ProvidesSchema
 
     public static function fromString(string $value): self
     {
-        return Schematic::instanciate(self::class, $value)->valueOrThrow();
+        return Schematic::instantiate(self::class, $value)->valueOrThrow();
     }
 
     public static function schema(): Schema
