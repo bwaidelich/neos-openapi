@@ -131,7 +131,7 @@ final readonly class Caller implements ProvidesSchema
     }
 }
 
-$callers = new class implements AuthContextProvider {
+$authContextProvider = new class implements AuthContextProvider {
     public function authContextFor(ServerRequestInterface $request, SecurityRequirementObject $requirement): object|null
     {
         $authorizationHeader = $request->getHeaderLine('Authorization');
@@ -159,10 +159,11 @@ $compiledApi = (new ApiCompiler())->compile($api);
 $factory = new HttpFactory(); // any PSR-17 response + stream factory
 $handler = new RequestHandler(
     $compiledApi,
+    // Hint: in normal application, you'll use the Framework's Dependency Injection Container here
     new FixedContainer(new PostApi(), new AccountApi()),
     $factory,
     $factory,
-    $callers,
+    $authContextProvider,
 );
 
 $request = ServerRequest::fromGlobals();

@@ -12,6 +12,8 @@ use Psr\Container\ContainerInterface;
  *
  * It can be used if {@see \Neos\OpenApi\Http\RequestHandler} is used in an environment without PSR Container
  * existing.
+ *
+ * @internal only used for testing etc
  */
 final readonly class FixedContainer implements ContainerInterface
 {

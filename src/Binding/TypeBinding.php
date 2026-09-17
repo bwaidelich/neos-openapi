@@ -91,7 +91,7 @@ final class TypeBinding
      * mentions.
      *
      * Fails loudly rather than returning an outcome: unlike coercion, a failure here is never caused by the
-     * caller's input — it raises `Neos\Schematic\UnextractableValue`, meaning the class does not expose the state
+     * caller's input — it raises `Neos\Schematic\Exception\UnextractableValue`, meaning the class does not expose the state
      * its own constructor names, which is a bug in the API rather than in the request.
      */
     #[\NoDiscard('inspect the returned primitives; discarding them means the serialization was pointless')]
