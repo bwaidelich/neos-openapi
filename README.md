@@ -563,7 +563,7 @@ Compilation is the one place reflection happens, and it fails loudly rather than
 
 | It rejects | Because |
 | --- | --- |
-| a duplicated `operationId` across any two classes | client generators turn them into method names |
+| a duplicated `operationId` across any two classes | client generators turn them into method names, and routers dispatch by them |
 | two operations claiming one path and method | one of them would be unreachable |
 | a `POST`/`PUT`/`PATCH` argument that is neither `#[Parameter]`, `#[RequestBody]`, nor named in the path | the predecessor inferred the body positionally, so reordering a signature changed the API |
 | `#[AuthContext]` on an operation no security requirement covers | there would be no caller to hand over |
@@ -680,6 +680,35 @@ an application without a container needs.
 > Query parameters are read from `getQueryParams()` and cookies from `getCookieParams()` — what PSR-7 says a
 > *server* request carries, not what its URI happens to spell. Every real PSR-7 server fills them in (as does
 > `ServerRequest::fromGlobals()`); a request built by hand, as above, needs `withQueryParams()`.
+
+### Routing it yourself
+
+`handle()` routes through the document. A framework with a router of its own can do that part instead: every
+operation is known by its `operationId` — the one declared on its attribute, or else the name of its method — and
+the Dispatch Table lists every one of them with the path template and method it answers, which is all a route
+needs. Whatever the router resolved is then handed over:
+
+```php
+// ...
+use Neos\OpenApi\Support\RelativePath;
+
+$routes = [];
+foreach ($compiler->compile($blog)->dispatchTable as $entry) {
+    $routes[] = $entry->method->value . ' ' . $entry->path->value . ' => ' . $entry->operationId;
+}
+assert(in_array('GET /posts/{slug} => getPost', $routes, true));
+
+// an operation, with the path variables the router extracted — already percent-decoded
+$routed = $handler->handleOperation(new ServerRequest('GET', '/blog/posts/hello-world'), 'getPost', ['slug' => 'hello-world']);
+assert((string) $routed->getBody() === '"hello-world"');
+
+// or a path, when none of its operations answers the request's method
+$wrongMethod = $handler->handlePath(new ServerRequest('PUT', '/blog/posts/hello-world'), RelativePath::fromString('/posts/{slug}'));
+assert($wrongMethod->getStatusCode() === 405);
+assert($wrongMethod->getHeaderLine('Allow') === 'GET');
+```
+
+Neither looks at the request's URI, so the router is free to serve the API under any prefix it likes.
 
 ## The specification, as PHP
 

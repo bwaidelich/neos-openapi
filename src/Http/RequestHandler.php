@@ -23,6 +23,7 @@ use Neos\OpenApi\Spec\SecuritySchemeObject;
 use Neos\OpenApi\Support\HttpMethod;
 use Neos\OpenApi\Support\HttpStatusCode;
 use Neos\OpenApi\Support\MediaTypeRange;
+use Neos\OpenApi\Support\RelativePath;
 use Neos\OpenApi\Support\SecuritySchemeType;
 use Psr\Container\ContainerInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
@@ -39,6 +40,9 @@ use Psr\Http\Server\RequestHandlerInterface;
  * TypeBinding} — built from the same schemas that described those types when the document was generated — turns request
  * data into them and the result back into a payload. That shared provider is the whole reason a response cannot
  * contradict the document that advertised it.
+ *
+ * A framework with a router of its own can do the routing instead, and hand over what it resolved: an operation
+ * ({@see handleOperation()}), or a path none of whose operations answers the request's method ({@see handlePath()}).
  *
  * What it answers itself, and what it does not:
  *
@@ -74,14 +78,8 @@ final readonly class RequestHandler implements RequestHandlerInterface
             throw new \LogicException(sprintf('The path "%s" matched but is not in the document', $template->value), 1783500410);
         }
         $method = HttpMethod::tryFrom(strtoupper($request->getMethod()));
-        $operation = $method === null ? null : $pathObject->operation($method);
-        if ($method === null || $operation === null) {
-            $allowed = array_map(static fn(HttpMethod $allowed): string => $allowed->value, $pathObject->allowedMethods());
-            return $this->problem(405, 'Method Not Allowed', sprintf(
-                '"%s" does not answer %s requests',
-                $template->value,
-                strtoupper($request->getMethod()),
-            ))->withHeader('Allow', implode(', ', $allowed));
+        if ($method === null || $pathObject->operation($method) === null) {
+            return $this->handlePath($request, $template);
         }
         $entry = $this->api->dispatchTable->find($template, $method);
         if ($entry === null) {
@@ -91,6 +89,36 @@ final readonly class RequestHandler implements RequestHandlerInterface
                 $template->value,
             ), 1783500411);
         }
+        // a path variable arrives percent-encoded, since it is a *URI* segment
+        return $this->handleOperation($request, $entry->operationId, array_map(rawurldecode(...), $variables ?? []));
+    }
+
+    /**
+     * Serves a request that has already been routed to one operation — by a framework router that matched the
+     * path and method itself, for example.
+     *
+     * Everything past routing happens here, exactly as for {@see handle()}: authentication, filling the arguments,
+     * calling the method and turning its result into a response.
+     *
+     * @param string $operationId the operation to serve, as it appears in the document
+     * @param array<string, string> $pathVariables the values of the path template's variables, already
+     *                                             percent-decoded
+     * @throws \InvalidArgumentException if the document has no operation with that operationId
+     */
+    public function handleOperation(ServerRequestInterface $request, string $operationId, array $pathVariables): ResponseInterface
+    {
+        $entry = $this->api->dispatchTable->findByOperationId($operationId);
+        if ($entry === null) {
+            throw new \InvalidArgumentException(sprintf('The document has no operation "%s"', $operationId), 1783500418);
+        }
+        $operation = $this->api->document->paths?->get($entry->path)?->operation($entry->method);
+        if ($operation === null) {
+            throw new \LogicException(sprintf(
+                'The Dispatch Table has an entry for "%s %s" but the document does not describe it',
+                $entry->method->value,
+                $entry->path->value,
+            ), 1783500419);
+        }
 
         $requirement = $operation->security ?? $this->api->document->security;
         $authContext = null;
@@ -98,7 +126,7 @@ final readonly class RequestHandler implements RequestHandlerInterface
             if ($this->authContexts === null) {
                 throw new \LogicException(sprintf(
                     'The operation "%s" requires authentication, but this handler was built without an %s',
-                    $entry->operationId ?? $template->value,
+                    $entry->operationId,
                     AuthContextProvider::class,
                 ), 1783500412);
             }
@@ -108,7 +136,7 @@ final readonly class RequestHandler implements RequestHandlerInterface
             }
         }
 
-        $filled = $this->arguments($entry, $request, $variables ?? [], $authContext);
+        $filled = $this->arguments($entry, $request, $pathVariables, $authContext);
         if ($filled['rejection'] !== null) {
             return $filled['rejection'];
         }
@@ -120,13 +148,47 @@ final readonly class RequestHandler implements RequestHandlerInterface
     }
 
     /**
+     * Answers a request that has been routed to a path, but whose method no operation on that path answers: a
+     * `405` with the `Allow` header listing the methods that are.
+     *
+     * A framework router that routes each operation by path *and* method on its own can fall back to this, so a
+     * wrong method is told apart from a wrong path.
+     *
+     * @param RelativePath $template the path template the request was routed to, as it appears in the document
+     * @throws \InvalidArgumentException if the document has no such path
+     */
+    public function handlePath(ServerRequestInterface $request, RelativePath $template): ResponseInterface
+    {
+        $pathObject = $this->api->document->paths?->get($template);
+        if ($pathObject === null) {
+            throw new \InvalidArgumentException(sprintf('The document has no path "%s"', $template->value), 1783500420);
+        }
+        $method = HttpMethod::tryFrom(strtoupper($request->getMethod()));
+        if ($method !== null && $pathObject->operation($method) !== null) {
+            throw new \LogicException(sprintf(
+                '"%s %s" is an operation of the document, so the request should have been routed to it rather than '
+                . 'to its path',
+                $method->value,
+                $template->value,
+            ), 1783500421);
+        }
+        $allowed = array_map(static fn(HttpMethod $allowed): string => $allowed->value, $pathObject->allowedMethods());
+        // the path as the client requested it, rather than the template: a router may serve the API under a prefix
+        return $this->problem(405, 'Method Not Allowed', sprintf(
+            '"%s" does not answer %s requests',
+            $request->getUri()->getPath(),
+            strtoupper($request->getMethod()),
+        ))->withHeader('Allow', implode(', ', $allowed));
+    }
+
+    /**
      * Fills every argument of an operation from the request, collecting *all* the reasons it could not be filled
      * rather than stopping at the first — a caller fixing three mistakes should need one round trip, not three.
      *
      * `rejection` is for the failures that are about the *request* rather than about one value, and so have no
      * issue to report: a body that is not JSON at all has no path to blame it on.
      *
-     * @param array<string, string> $variables the path template's variables, as matched
+     * @param array<string, string> $variables the path template's variables, percent-decoded
      * @return array{arguments: array<string, mixed>, issues: Issues, rejection: ResponseInterface|null} the
      *         arguments ready to be spread as named arguments, and why any of them are missing
      */
@@ -213,8 +275,7 @@ final readonly class RequestHandler implements RequestHandlerInterface
     private function rawParameter(ArgumentBinding $binding, ServerRequestInterface $request, array $variables): mixed
     {
         return match ($binding->source) {
-            // a path variable arrives percent-encoded, since it is a *URI* segment
-            ArgumentSource::path => isset($variables[$binding->wireName]) ? rawurldecode($variables[$binding->wireName]) : null,
+            ArgumentSource::path => $variables[$binding->wireName] ?? null,
             ArgumentSource::query => $request->getQueryParams()[$binding->wireName] ?? null,
             ArgumentSource::header => $request->hasHeader($binding->wireName) ? $request->getHeaderLine($binding->wireName) : null,
             ArgumentSource::cookie => $request->getCookieParams()[$binding->wireName] ?? null,
