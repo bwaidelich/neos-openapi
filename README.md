@@ -504,7 +504,9 @@ assert(str_contains((string) $account, '"401":{"description":"The request was no
 `security:` takes a scheme name, or an array mapping scheme names to the scopes they must grant
 (`['oauth2' => ['read:posts']]`), all of which apply together. `allowAnonymous: true` adds "unauthenticated is
 also acceptable" — and then the `#[AuthContext]` argument has to be nullable, since `null` is what it will be
-handed. The same requirement can be set once on the `ApiDefinition`, where it covers every operation.
+handed. The same requirement can be set once on the `ApiDefinition`, where it covers every operation. Every
+scheme a requirement names has to be declared on the `ApiDefinition` — compilation rejects one that is not, since
+the document would reference nothing and the `401` would have no challenge to send.
 
 Every type the specification defines has a named constructor, and only the members that apply to it: `apiKey()`,
 `http()`, `mutualTLS()`, `oauth2()`, `openIdConnect()`, plus `bearer()` and `basic()` for the two HTTP schemes

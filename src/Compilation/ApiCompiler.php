@@ -37,6 +37,7 @@ use Neos\OpenApi\Spec\PathsObject;
 use Neos\OpenApi\Spec\RequestBodyObject;
 use Neos\OpenApi\Spec\ResponseObject;
 use Neos\OpenApi\Spec\ResponsesObject;
+use Neos\OpenApi\Spec\SecurityRequirementObject;
 use Neos\OpenApi\Support\HttpStatusCode;
 use Neos\OpenApi\Support\MediaTypeRange;
 use Neos\OpenApi\Support\ParameterLocation;
@@ -54,7 +55,8 @@ use ReflectionUnionType;
  * cached and served without reflecting anything.
  *
  * Everything it can check, it checks here and fails loudly — a duplicated `operationId`, two operations claiming
- * one path and method, an argument nothing can fill, an auth context on an unsecured operation. All of those are
+ * one path and method, an argument nothing can fill, an auth context on an unsecured operation, a security
+ * requirement naming a scheme the definition does not declare. All of those are
  * mistakes in the code being described, and finding them at compile time beats a confusing response later.
  */
 final readonly class ApiCompiler
@@ -66,6 +68,9 @@ final readonly class ApiCompiler
         $dispatchTable = DispatchTable::create();
         /** @var array<string, string> $operationIds operationId => where it was first seen */
         $operationIds = [];
+        if ($api->security !== null) {
+            self::assertSchemesAreDeclared($api, $api->security, 'The global security requirement of the ApiDefinition');
+        }
 
         foreach ($api->apiClasses as $registered) {
             $reflectionClass = new \ReflectionClass($registered->className);
@@ -97,6 +102,10 @@ final readonly class ApiCompiler
                     ), 1783500320);
                 }
                 $operationIds[$operationId] = $origin;
+
+                if ($operation->security !== null) {
+                    self::assertSchemesAreDeclared($api, $operation->security, sprintf('The security requirement of %s', $origin));
+                }
 
                 if ($dispatchTable->has($operation->path, $operation->method)) {
                     throw new InvalidApiDefinitionException(sprintf(
@@ -221,6 +230,29 @@ final readonly class ApiCompiler
             deprecated: $operation->deprecated,
             security: $operation->security,
         );
+    }
+
+    /**
+     * A requirement is published as a reference to the schemes it names, so an undeclared one leaves the document
+     * pointing at nothing — and the request handler without a scheme to derive its `WWW-Authenticate` challenge from.
+     */
+    private static function assertSchemesAreDeclared(ApiDefinition $api, SecurityRequirementObject $requirement, string $what): void
+    {
+        foreach ($requirement->schemeNames() as $schemeName) {
+            if ($api->securitySchemes?->has($schemeName) === true) {
+                continue;
+            }
+            $declared = $api->securitySchemes?->names() ?? [];
+            throw new InvalidApiDefinitionException(sprintf(
+                '%s names the security scheme "%s", but the ApiDefinition declares %s. '
+                . 'To solve this, pass it to ApiDefinition::create(securitySchemes: …), '
+                . 'e.g. SecuritySchemeOrReferenceObjectMap::create()->with(\'%s\', SecuritySchemeObject::bearer()).',
+                $what,
+                $schemeName,
+                $declared === [] ? 'none' : sprintf('only "%s"', implode('", "', $declared)),
+                $schemeName,
+            ), 1783500335);
+        }
     }
 
     /**
