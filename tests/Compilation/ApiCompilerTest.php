@@ -274,6 +274,7 @@ final class ApiCompilerTest extends TestCase
     {
         $api = ApiDefinition::create(
             info: new InfoObject(title: 'Blog', version: '1.0.0'),
+            securitySchemes: SecuritySchemeOrReferenceObjectMap::create()->with('bearerAuth', SecuritySchemeObject::bearer()),
             security: SecurityRequirementObject::scheme('bearerAuth'),
         )->withOperationsFrom(UnsecuredAuthContextApi::class);
 
@@ -282,6 +283,34 @@ final class ApiCompilerTest extends TestCase
 
         self::assertNotNull($entry);
         self::assertSame(ArgumentSource::authContext, $entry->arguments[0]->source);
+    }
+
+    /**
+     * The document would reference a scheme it never declares, and the handler would have none to derive the
+     * `WWW-Authenticate` challenge of its `401` from.
+     */
+    public function testAnOperationRequiringAnUndeclaredSecuritySchemeFailsLoudly(): void
+    {
+        $api = ApiDefinition::create(
+            info: new InfoObject(title: 'Blog', version: '1.0.0'),
+            securitySchemes: SecuritySchemeOrReferenceObjectMap::create()->with('basicAuth', SecuritySchemeObject::basic()),
+        )->withOperationsFrom(PostApi::class);
+
+        $this->expectException(InvalidApiDefinitionException::class);
+        $this->expectExceptionMessageMatches('/PostApi::createPost\(\) names the security scheme "bearerAuth", but the ApiDefinition declares only "basicAuth"/');
+        $this->compiler->compile($api);
+    }
+
+    public function testAGlobalSecurityRequirementNamingAnUndeclaredSchemeFailsLoudly(): void
+    {
+        $api = ApiDefinition::create(
+            info: new InfoObject(title: 'Blog', version: '1.0.0'),
+            security: SecurityRequirementObject::scheme('bearerAuth'),
+        );
+
+        $this->expectException(InvalidApiDefinitionException::class);
+        $this->expectExceptionMessageMatches('/global security requirement .* names the security scheme "bearerAuth", but the ApiDefinition declares none/');
+        $this->compiler->compile($api);
     }
 
     public function testDuplicateOperationIdsAcrossTwoApiClassesFailLoudly(): void
