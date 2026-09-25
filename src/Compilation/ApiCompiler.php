@@ -81,10 +81,19 @@ final readonly class ApiCompiler
                 if (isset($operationIds[$operationId])) {
                     throw new InvalidApiDefinitionException(sprintf(
                         'The operationId "%s" is used by both %s and %s. It has to be unique across the document, '
-                        . 'since clients generated from it turn operationIds into method names.',
+                        . 'since it identifies the operation — clients generated from it turn operationIds into '
+                        . 'method names, and routers dispatch by it. %s'
+                        . 'To solve this, give one of them a distinct operationId on its attribute, e.g. '
+                        . '#[Operation(path: \'%s\', method: \'%s\', operationId: \'%s\')].',
                         $operationId,
                         $operationIds[$operationId],
                         $origin,
+                        $operation->operationId === null
+                            ? sprintf('%s declares none, so it defaults to the name of its method. ', $origin)
+                            : '',
+                        $operation->path->value,
+                        $operation->method->value,
+                        lcfirst($reflectionClass->getShortName()) . ucfirst($method->getName()),
                     ), 1783500320);
                 }
                 $operationIds[$operationId] = $origin;
@@ -106,12 +115,14 @@ final readonly class ApiCompiler
                     ? $paths->with($operation->path, PathObject::create()->withOperation($operation->method, $compiled))
                     : $paths->replace($operation->path, $existing->withOperation($operation->method, $compiled));
 
-                $dispatchTable = $dispatchTable->with($operation->path, $operation->method, new DispatchEntry(
-                    $registered->className,
-                    $method->getName(),
-                    array_map(static fn(ClassifiedArgument $a): ArgumentBinding => $a->binding, $arguments),
-                    $operationId,
-                    $branches['successes'],
+                $dispatchTable = $dispatchTable->with(new DispatchEntry(
+                    path: $operation->path,
+                    method: $operation->method,
+                    operationId: $operationId,
+                    apiClassName: $registered->className,
+                    methodName: $method->getName(),
+                    arguments: array_map(static fn(ClassifiedArgument $a): ArgumentBinding => $a->binding, $arguments),
+                    successTypes: $branches['successes'],
                 ));
             }
         }

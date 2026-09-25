@@ -613,7 +613,10 @@ final class ApiCompilerTest extends TestCase
                 $published[] = strtoupper($member) . ' ' . $path;
             }
         }
-        $dispatchable = array_keys(iterator_to_array($compiled->dispatchTable->all()));
+        $dispatchable = [];
+        foreach ($compiled->dispatchTable as $entry) {
+            $dispatchable[] = $entry->method->value . ' ' . $entry->path->value;
+        }
 
         sort($published);
         sort($dispatchable);
