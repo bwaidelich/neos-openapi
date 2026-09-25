@@ -53,11 +53,26 @@ final class ProblemDocumentTest extends TestCase
         self::assertSame(['type', 'title', 'status'], array_keys($this->encode($document)));
     }
 
-    public function testTheTypeUriNamesTheStatusAndTitle(): void
+    public function testTheTypeUriNamesTheStatusCodesDefinition(): void
     {
         $document = ProblemDocument::create(HttpStatusCode::fromInteger(400), 'Bad Request');
 
-        self::assertSame('https://www.rfc-editor.org/rfc/rfc9110#name-400-bad-request', $document->type);
+        self::assertSame('https://www.rfc-editor.org/rfc/rfc9110#status.400', $document->type);
+    }
+
+    public function testACustomTitleDoesNotChangeTheTypeUri(): void
+    {
+        $document = ProblemDocument::create(HttpStatusCode::fromInteger(404), 'Book not found');
+
+        self::assertSame('https://www.rfc-editor.org/rfc/rfc9110#status.404', $document->type);
+        self::assertSame('Book not found', $document->title);
+    }
+
+    public function testAStatusCodeRfc9110DoesNotDefineHasABlankType(): void
+    {
+        $document = ProblemDocument::create(HttpStatusCode::fromInteger(429), 'Too Many Requests');
+
+        self::assertSame('about:blank', $document->type);
     }
 
     /**

@@ -30,6 +30,17 @@ final readonly class ProblemDocument implements JsonSerializable, ProvidesSchema
     public const CONTENT_TYPE = 'application/problem+json';
 
     /**
+     * The status codes RFC 9110 defines, each of which has a section with a stable `status.<code>` anchor there.
+     */
+    private const RFC9110_STATUS_CODES = [
+        100, 101,
+        200, 201, 202, 203, 204, 205, 206,
+        300, 301, 302, 303, 304, 305, 306, 307, 308,
+        400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410, 411, 412, 413, 414, 415, 416, 417, 418, 421, 422, 426,
+        500, 501, 502, 503, 504, 505,
+    ];
+
+    /**
      * @param list<ProblemIssue> $issues
      */
     private function __construct(
@@ -50,7 +61,7 @@ final readonly class ProblemDocument implements JsonSerializable, ProvidesSchema
         foreach ($issues?->toArray() ?? [] as $issue) {
             $mapped[] = ProblemIssue::fromIssue($issue);
         }
-        return new self(self::typeUriFor($status, $title), $title, $status, $detail, $mapped);
+        return new self(self::typeUriFor($status), $title, $status, $detail, $mapped);
     }
 
     public static function contentType(): MediaTypeRange
@@ -98,12 +109,18 @@ final readonly class ProblemDocument implements JsonSerializable, ProvidesSchema
         return $document;
     }
 
-    private static function typeUriFor(HttpStatusCode $status, string $title): string
+    /**
+     * The type names the status code's definition, never the title: a title is free text ("Book not found"), and
+     * RFC 9110 only has anchors for its own sections. Those are addressed by their explicit `status.<code>` anchor
+     * rather than the heading-derived `name-…` one, which xml2rfc truncates (`name-407-proxy-authentication-re`).
+     * A status code RFC 9110 does not define gets `about:blank`, which RFC 9457 reserves for "nothing beyond what
+     * the status code says".
+     */
+    private static function typeUriFor(HttpStatusCode $status): string
     {
-        return sprintf(
-            'https://www.rfc-editor.org/rfc/rfc9110#name-%d-%s',
-            $status->value,
-            strtolower(str_replace(' ', '-', $title)),
-        );
+        if (!in_array($status->value, self::RFC9110_STATUS_CODES, true)) {
+            return 'about:blank';
+        }
+        return sprintf('https://www.rfc-editor.org/rfc/rfc9110#status.%d', $status->value);
     }
 }
