@@ -91,6 +91,19 @@ final class CompilationTest extends TestCase
         );
     }
 
+    /**
+     * Renderers that resolve `$ref`s before displaying a schema lose the component name, so an object component
+     * carries it as its title. Components that are not objects are left untitled.
+     */
+    public function testAnObjectComponentIsTitledWithItsName(): void
+    {
+        $schemas = $this->arrayAt($this->compile(), 'components', 'schemas');
+
+        self::assertSame('Author', $this->arrayAt($schemas, 'Author')['title'] ?? null);
+        self::assertArrayNotHasKey('title', $this->arrayAt($schemas, 'AuthorName'));
+        self::assertArrayNotHasKey('title', $this->arrayAt($schemas, 'AuthorNames'));
+    }
+
     public function testAnEnumQueryParameterKeepsItsCases(): void
     {
         $document = $this->compile();
