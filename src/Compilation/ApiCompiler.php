@@ -6,6 +6,7 @@ namespace Neos\OpenApi\Compilation;
 
 use Neos\JsonSchema\AnyOfSchema;
 use Neos\JsonSchema\Schema as JsonSchema;
+use Neos\JsonSchema\StringSchema;
 use Neos\OpenApi\ApiDefinition;
 use Neos\OpenApi\Attributes\AuthContext;
 use Neos\OpenApi\Attributes\Operation;
@@ -482,6 +483,14 @@ final readonly class ApiCompiler
         $content = null;
         if ($bodyType !== null) {
             $contentType = $responseClassName::contentType() ?? MediaTypeRange::fromString('application/json');
+            if (!$contentType->isJson() && !self::isStringType($bodyType)) {
+                throw new InvalidApiDefinitionException(sprintf(
+                    'The response %s has the content type "%s", which is not JSON: its body is written as it is, so its body type must be a string or a class with a string schema, not %s',
+                    $responseClassName,
+                    $contentType->value,
+                    $bodyType->describe(),
+                ), 1783500422);
+            }
             $content = MediaTypeObjectMap::create()->with(
                 $contentType,
                 new MediaTypeObject(schema: TypeBinding::jsonSchema($bodyType, $components)),
@@ -493,6 +502,22 @@ final readonly class ApiCompiler
             headers: $this->responseHeaders($responseClassName, $components),
             content: $content,
         );
+    }
+
+    /**
+     * Whether a value of this type serializes to a string — the only body a response that is not JSON can write,
+     * since such a body goes out as it is rather than encoded. A string-backed value object counts, so an HTML
+     * fragment can be a type of its own.
+     */
+    private static function isStringType(TypeReference $type): bool
+    {
+        if ($type->nullable) {
+            return false;
+        }
+        $className = $type->className();
+        return $className === null
+            ? $type->builtinType() === BuiltinType::string
+            : TypeBinding::ownSchema($className) instanceof StringSchema;
     }
 
     /**

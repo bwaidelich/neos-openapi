@@ -297,6 +297,12 @@ The predecessor could give a non-200 response a description but never a body. `b
 `TypeReference` and the response documents a schema, which `body()` then renders through the very same binding —
 so an error body is described exactly the way a success body is.
 
+`contentType()` is not only a label. A JSON media type — `application/json` or a `+json` suffix such as
+`application/problem+json` — is encoded as JSON. Any other one, `text/html` or `application/rss+xml` say, is written
+as the string the body serialized to, so an HTML page goes out as HTML rather than as a quoted JSON string literal.
+That only works for a string, so such a response's `bodyType()` must be `string` or a class with a string schema;
+anything else is refused while compiling.
+
 ### Several shapes at one status
 
 Ordinary branches all answer the same `200`, and several of them are simply a union: the response describes an

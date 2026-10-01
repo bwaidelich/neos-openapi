@@ -312,11 +312,10 @@ final readonly class RequestHandler implements RequestHandlerInterface
                 $response = $this->responseFactory->createResponse($result::statusCode()->value);
             } else {
                 $contentType = $result::contentType() ?? MediaTypeRange::fromString('application/json');
-                $response = $this->json(
-                    $result::statusCode()->value,
-                    $contentType->value,
-                    TypeBinding::serialize($bodyType, $result->body()),
-                );
+                $body = TypeBinding::serialize($bodyType, $result->body());
+                $response = $contentType->isJson()
+                    ? $this->json($result::statusCode()->value, $contentType->value, $body)
+                    : $this->verbatim($result::statusCode()->value, $contentType->value, $body, $result);
             }
             return $result instanceof ApiResponseWithHeaders ? $this->withDeclaredHeaders($response, $result) : $response;
         }
@@ -526,6 +525,26 @@ final readonly class RequestHandler implements RequestHandlerInterface
     {
         $document = ProblemDocument::create(HttpStatusCode::fromInteger($status), $title, $detail, $issues);
         return $this->json($status, ProblemDocument::CONTENT_TYPE, $document);
+    }
+
+    /**
+     * A body that is not JSON — HTML, plain text, a feed — goes out as the string it serialized to, never encoded:
+     * a `json_encode`d one would be a quoted string literal. The compiler only lets string body types through for
+     * such a response, so anything else is a `body()` contradicting its own `bodyType()`.
+     */
+    private function verbatim(int $status, string $contentType, mixed $body, ApiResponse $result): ResponseInterface
+    {
+        if (!is_string($body)) {
+            throw new \LogicException(sprintf(
+                'The body of %s, which has the content type "%s", must serialize to a string, got %s',
+                $result::class,
+                $contentType,
+                get_debug_type($body),
+            ), 1783500423);
+        }
+        return $this->responseFactory->createResponse($status)
+            ->withHeader('Content-Type', $contentType)
+            ->withBody($this->streamFactory->createStream($body));
     }
 
     private function json(int $status, string $contentType, mixed $body): ResponseInterface
