@@ -108,7 +108,7 @@ final class TypeBinding
      * described, not in a request, so it is refused the way the compiler refuses an unsupported type.
      *
      * @param class-string $className
-     * @internal also reached from {@see SchemaHoister}
+     * @internal also reached from {@see SchemaHoister} and {@see \Neos\OpenApi\Compilation\ApiCompiler}
      */
     public static function ownSchema(string $className): JsonSchema
     {

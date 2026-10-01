@@ -16,6 +16,7 @@ use Neos\OpenApi\Spec\SecurityRequirementObject;
 use Neos\OpenApi\Spec\SecuritySchemeObject;
 use Neos\OpenApi\Spec\SecuritySchemeOrReferenceObjectMap;
 use Neos\OpenApi\Support\FixedContainer;
+use Neos\OpenApi\Tests\Http\Fixtures\Broken\BrokenBodyApi;
 use Neos\OpenApi\Tests\Http\Fixtures\Broken\BrokenHeaderApi;
 use Neos\OpenApi\Tests\Http\Fixtures\Caller;
 use Neos\OpenApi\Tests\Http\Fixtures\NewTodo;
@@ -370,6 +371,34 @@ final class RequestHandlerTest extends TestCase
             ],
             $this->decoded($this->handle('GET', '/todos/many/related')),
         );
+    }
+
+    /**
+     * HTML, plain text or a feed would be a quoted, escaped JSON string literal if it were encoded like the rest —
+     * a body that is not JSON goes out as the string it serialized to.
+     */
+    public function testABodyThatIsNotJsonIsWrittenAsItIs(): void
+    {
+        $response = $this->handle('GET', '/todos/one/page');
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertSame('text/html; charset=utf-8', $response->getHeaderLine('Content-Type'));
+        self::assertSame('<h1 class="todo">Write &quot;the&quot; handler</h1>', (string) $response->getBody());
+        // the other branch of the same operation is unaffected
+        self::assertSame(404, $this->handle('GET', '/todos/missing/page')->getStatusCode());
+    }
+
+    public function testABodyThatIsNotJsonButNoStringFailsLoudly(): void
+    {
+        $factory = new HttpFactory();
+        $compiled = (new ApiCompiler())->compile(
+            ApiDefinition::create(info: new InfoObject(title: 'Broken', version: '1.0.0'))->withOperationsFrom(BrokenBodyApi::class),
+        );
+        $handler = new RequestHandler($compiled, new FixedContainer(new BrokenBodyApi()), $factory, $factory);
+
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionCode(1783500423);
+        $handler->handle(new ServerRequest('GET', '/text'));
     }
 
     public function testAVoidOperationAnswersABodyless204(): void
