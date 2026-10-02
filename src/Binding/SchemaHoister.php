@@ -48,7 +48,7 @@ final class SchemaHoister
         if (!$components->has($name, $className)) {
             // Registering *before* recursing would guard against cycles — but schematic rejects recursive types
             // outright, so rendering the body first is safe, and it keeps collision detection honest.
-            $components->register($name, $className, self::body($className, $components));
+            $components->register($name, $className, self::titled(self::body($className, $components), $name));
         }
         return self::nullableIfNeeded($type, SchemaObjectMap::reference($name));
     }
@@ -61,6 +61,19 @@ final class SchemaHoister
     {
         $position = strrpos($className, '\\');
         return $position === false ? $className : substr($className, $position + 1);
+    }
+
+    /**
+     * An object component is titled with its component name, unless its schema already has a title. Tools that
+     * resolve `$ref`s before rendering — Swagger UI for OpenAPI 3.1 among them — lose the name the reference
+     * carried and would otherwise label the type just "object".
+     */
+    private static function titled(JsonSchema $schema, string $name): JsonSchema
+    {
+        if (!$schema instanceof JsonObjectSchema || $schema->title !== null) {
+            return $schema;
+        }
+        return $schema->with(title: $name);
     }
 
     /**
