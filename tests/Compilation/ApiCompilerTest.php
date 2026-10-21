@@ -568,6 +568,31 @@ final class ApiCompilerTest extends TestCase
     }
 
     /**
+     * A body that is not JSON is described under its own media type, by the schema of a string — here a
+     * string-backed value object, which stays a component like any other type.
+     */
+    public function testAResponseThatIsNotJsonIsDescribedUnderItsOwnMediaType(): void
+    {
+        $document = $this->document($this->compiler->compile($this->definition()->withOperationsFrom(Fixtures\PageApi::class)));
+
+        self::assertSame(
+            ['text/html' => ['schema' => ['$ref' => '#/components/schemas/PostTitle']]],
+            $this->arrayAt($document, 'paths', '/posts/{slug}/page', 'get', 'responses', 200, 'content'),
+        );
+    }
+
+    /**
+     * Such a body is written as it is, so only a string can be one: an object would have to be encoded somehow,
+     * and which encoding a media type like `text/html` means is not something to guess.
+     */
+    public function testAResponseThatIsNotJsonMustHaveAStringBody(): void
+    {
+        $this->expectException(InvalidApiDefinitionException::class);
+        $this->expectExceptionCode(1783500422);
+        $this->compiler->compile($this->definition()->withOperationsFrom(Fixtures\Invalid\ObjectPageApi::class));
+    }
+
+    /**
      * Unions describe what an operation *answers*, never what it takes. Going out the value exists, so which
      * branch it is can simply be asked; coming in there is only primitives, and deciding which branch to build
      * them into is a question nothing here can answer.

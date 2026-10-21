@@ -32,6 +32,16 @@ final class TodoApi
         return $id->value === 'missing' ? new TodoNotFound() : Todo::create($id, 'Write the handler');
     }
 
+    /**
+     * The same todo, as a body that is not JSON.
+     */
+    #[Operation(path: '/todos/{id}/page', method: 'GET')]
+    public function todoPage(TodoId $id): TodoPage|TodoNotFound
+    {
+        $this->lastArguments = ['id' => $id];
+        return $id->value === 'missing' ? new TodoNotFound() : new TodoPage(Todo::create($id, 'Write "the" handler'));
+    }
+
     #[Operation(path: '/todos', method: 'GET')]
     public function listTodos(
         int $limit = 2,

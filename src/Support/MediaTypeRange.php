@@ -49,6 +49,16 @@ final class MediaTypeRange implements JsonSerializable
         return $this->type !== '*' && $this->subtype !== '*';
     }
 
+    /**
+     * Whether a body of this media type is JSON — `application/json` itself, or a `+json` structured syntax suffix
+     * such as `application/problem+json` (RFC 6839). A body of any other type is not encoded, but written as it is.
+     */
+    public function isJson(): bool
+    {
+        $subtype = strtolower($this->subtype);
+        return strtolower($this->type) === 'application' && ($subtype === 'json' || str_ends_with($subtype, '+json'));
+    }
+
     public function jsonSerialize(): string
     {
         return $this->value;
